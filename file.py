@@ -1,137 +1,50 @@
 import pandas as pd
-import difflib
-import pygal
+import matplotlib.pyplot as plt
 
-def compare_and_plot(file1, column1, file2, column2, similarity_threshold=0.5):
+def comparar_servidores(arquivo1, coluna1, arquivo2, coluna2, status="Power On"):
     """
-    Compara duas colunas de duas planilhas Excel e gera um gráfico com os valores únicos da primeira coluna que não possuem correspondência na segunda com pelo menos a similaridade especificada.
+    Compara duas planilhas para identificar servidores não descobertos.
 
     Args:
-        file1: Nome do arquivo da primeira planilha.
-        column1: Nome da coluna a ser comparada na primeira planilha.
-        file2: Nome do arquivo da segunda planilha.
-        column2: Nome da coluna a ser comparada na segunda planilha.
-        similarity_threshold: Limiar de similaridade (valor entre 0 e 1).
+        arquivo1: Nome do arquivo da planilha com o inventário completo.
+        coluna1: Nome da coluna com os hostnames na primeira planilha.
+        arquivo2: Nome do arquivo da planilha com os servidores descobertos.
+        coluna2: Nome da coluna com os hostnames na segunda planilha.
+        status: Status dos servidores a serem considerados.
 
     Returns:
-        Nenhum. Gera um gráfico Pygal.
-    """
-
-    # Carregar os dados das planilhas
-    df1 = pd.read_excel(file1, usecols=[column1])
-    df2 = pd.read_excel(file2, usecols=[column2])
-
-    # Converter os dados para listas
-    list1 = df1[column1].tolist()
-    list2 = df2[column2].tolist()
-
-    # Encontrar os valores únicos da primeira lista que não possuem correspondência na segunda
-    unique_values = []
-    for value1 in list1:
-        found = False
-        for value2 in list2:
-            if difflib.SequenceMatcher(None, value1, value2).ratio() >= similarity_threshold:
-                found = True
-                break
-        if not found:
-            unique_values.append(value1)
-
-    # Criar um gráfico de barras com os valores únicos
-    chart = pygal.Bar(title='Valores Únicos')
-    chart.add('Valores Únicos', unique_values)
-    chart.render_to_file('grafico_diferencas.svg')
-
-# Exemplo de uso
-compare_and_plot('planilha1.xlsx', 'ColunaA', 'planilha2.xlsx', 'ColunaB', 0.7)
-
-
-
-import pandas as pd
-
-def comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, status, sufixo):
-    """
-    Compara duas colunas de duas planilhas Excel, filtrando por status e ignorando case e sufixo.
-
-    Args:
-        arquivo1 (str): Nome do arquivo da primeira planilha.
-        coluna1 (str): Nome da coluna a ser comparada na primeira planilha.
-        arquivo2 (str): Nome do arquivo da segunda planilha.
-        coluna2 (str): Nome da coluna a ser comparada na segunda planilha.
-        status (str): Valor do status para filtrar.
-        sufixo (str): Sufixo a ser removido das strings da segunda coluna.
-
-    Returns:
-        list: Lista de tuplas (valor da coluna 1, valor da coluna 2) para os itens encontrados.
+        Um DataFrame com a contagem de servidores descobertos e não descobertos.
     """
 
     # Carregar os dados das planilhas
     df1 = pd.read_excel(arquivo1)
     df2 = pd.read_excel(arquivo2)
 
-    # Filtrar os dados da primeira planilha pelo status
-    df1_filtrado = df1[df1['status'] == status]
+    # Filtrar os servidores com status "Power On"
+    df1 = df1[df1['Status'] == status]
 
-    # Remover o sufixo da coluna 2 da segunda planilha e converter para minúsculas
-    df2[coluna2] = df2[coluna2].str.replace(sufixo, '').str.lower()
+    # Converter os hostnames para minúsculas para comparação
+    df1[coluna1] = df1[coluna1].str.lower()
+    df2[coluna2] = df2[coluna2].str.lower()
 
-    # Comparar as strings e retornar os resultados
-    resultados = []
-    for valor1 in df1_filtrado[coluna1]:
-        for valor2 in df2[coluna2]:
-            if valor1.lower() == valor2:
-                resultados.append((valor1, valor2))
+    # Encontrar os servidores não descobertos
+    nao_descobertos = df1[~df1[coluna1].isin(df2[coluna2])]
+
+    # Contar os servidores descobertos e não descobertos
+    total_servidores = len(df1)
+    descobertos = len(df2)
+    nao_descobertos = len(nao_descobertos)
+
+    # Criar um DataFrame com os resultados
+    resultados = pd.DataFrame({'Status': ['Descobertos', 'Não Descobertos'],
+                               'Quantidade': [descobertos, nao_descobertos]})
+
+    # Criar um gráfico de pizza
+    plt.pie(resultados['Quantidade'], labels=resultados['Status'], autopct='%1.1f%%')
+    plt.title('Cobertura de Servidores')
+    plt.show()
 
     return resultados
 
 # Exemplo de uso
-arquivo1 = 'planilha1.xlsx'
-coluna1 = 'nome_equipamento'
-arquivo2 = 'planilha2.xlsx'
-coluna2 = 'nome_host'
-status = 'Power On'
-sufixo = '.dominio.com'
-
-resultados = comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, status, sufixo)
-
-# Imprimir os resultados
-for resultado in resultados:
-    print(resultado)
-
-
-
-import pandas as pd
-
-def comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, coluna_status, status, sufixo):
-    """
-    Compara duas colunas de duas planilhas, filtrando por status e ignorando sufixo e caixa.
-
-    Args:
-        arquivo1 (str): Nome do arquivo da primeira planilha.
-        coluna1 (str): Nome da coluna a ser comparada na primeira planilha.
-        arquivo2 (str): Nome do arquivo da segunda planilha.
-        coluna2 (str): Nome da coluna a ser comparada na segunda planilha.
-        coluna_status (str): Nome da coluna de status na primeira planilha.
-        status (str): Valor do status para filtrar.
-        sufixo (str): Sufixo a ser removido da segunda coluna.
-    """
-
-    # Carregar os dados das planilhas
-    df1 = pd.read_excel(arquivo1)
-    df2 = pd.read_excel(arquivo2)
-
-    # Filtrar os dados da primeira planilha por status
-    df1_filtrado = df1[df1[coluna_status] == status]
-
-    # Remover o sufixo da segunda coluna e converter para minúsculas
-    df2[coluna2] = df2[coluna2].str.replace(sufixo, '').str.lower()
-
-    # Converter a coluna a ser comparada na primeira planilha para minúsculas
-    df1_filtrado[coluna1] = df1_filtrado[coluna1].str.lower()
-
-    # Encontrar os valores únicos da primeira planilha que não estão na segunda
-    valores_unicos = df1_filtrado[~df1_filtrado[coluna1].isin(df2[coluna2])][coluna1]
-
-    print(valores_unicos)
-
-# Exemplo de uso
-comparar_planilhas('planilha1.xlsx', 'Nome', 'planilha2.xlsx', 'Hostname', 'Status', 'Power On', '.dominio.com')
+comparar_servidores('inventario.xlsx', 'hostname', 'descobertos.xlsx', 'Human Name')
