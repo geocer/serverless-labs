@@ -48,48 +48,51 @@ compare_and_plot('planilha1.xlsx', 'ColunaA', 'planilha2.xlsx', 'ColunaB', 0.7)
 
 import pandas as pd
 
-def comparar_strings(arquivo1, coluna1, arquivo2, coluna2, sufixo):
+def comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, status, sufixo):
     """
-    Compara as strings de duas colunas, ignorando o sufixo e a case.
+    Compara duas colunas de duas planilhas Excel, filtrando por status e ignorando case e sufixo.
 
     Args:
         arquivo1 (str): Nome do arquivo da primeira planilha.
         coluna1 (str): Nome da coluna a ser comparada na primeira planilha.
         arquivo2 (str): Nome do arquivo da segunda planilha.
         coluna2 (str): Nome da coluna a ser comparada na segunda planilha.
-        sufixo (str): Sufixo a ser removido da segunda coluna.
+        status (str): Valor do status para filtrar.
+        sufixo (str): Sufixo a ser removido das strings da segunda coluna.
 
     Returns:
-        list: Lista de strings da primeira coluna que não foram encontradas na segunda.
+        list: Lista de tuplas (valor da coluna 1, valor da coluna 2) para os itens encontrados.
     """
 
     # Carregar os dados das planilhas
     df1 = pd.read_excel(arquivo1)
     df2 = pd.read_excel(arquivo2)
 
-    # Remover o sufixo da segunda coluna e converter para minúsculas
+    # Filtrar os dados da primeira planilha pelo status
+    df1_filtrado = df1[df1['status'] == status]
+
+    # Remover o sufixo da coluna 2 da segunda planilha e converter para minúsculas
     df2[coluna2] = df2[coluna2].str.replace(sufixo, '').str.lower()
 
-    # Converter a primeira coluna para minúsculas
-    df1[coluna1] = df1[coluna1].str.lower()
+    # Comparar as strings e retornar os resultados
+    resultados = []
+    for valor1 in df1_filtrado[coluna1]:
+        for valor2 in df2[coluna2]:
+            if valor1.lower() == valor2:
+                resultados.append((valor1, valor2))
 
-    # Criar um conjunto para verificar a existência de cada string na segunda coluna de forma eficiente
-    conjunto_strings2 = set(df2[coluna2])
-
-    # Comparar as strings e retornar as que não foram encontradas
-    nao_encontradas = []
-    for string in df1[coluna1]:
-        if string not in conjunto_strings2:
-            nao_encontradas.append(string)
-
-    return nao_encontradas
+    return resultados
 
 # Exemplo de uso
 arquivo1 = 'planilha1.xlsx'
-coluna1 = 'ColunaA'
+coluna1 = 'nome_equipamento'
 arquivo2 = 'planilha2.xlsx'
-coluna2 = 'ColunaB'
+coluna2 = 'nome_host'
+status = 'Power On'
 sufixo = '.dominio.com'
 
-resultados = comparar_strings(arquivo1, coluna1, arquivo2, coluna2, sufixo)
-print(resultados)
+resultados = comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, status, sufixo)
+
+# Imprimir os resultados
+for resultado in resultados:
+    print(resultado)
