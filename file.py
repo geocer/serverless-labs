@@ -96,3 +96,42 @@ resultados = comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, status, su
 # Imprimir os resultados
 for resultado in resultados:
     print(resultado)
+
+
+
+import pandas as pd
+
+def comparar_planilhas(arquivo1, coluna1, arquivo2, coluna2, coluna_status, status, sufixo):
+    """
+    Compara duas colunas de duas planilhas, filtrando por status e ignorando sufixo e caixa.
+
+    Args:
+        arquivo1 (str): Nome do arquivo da primeira planilha.
+        coluna1 (str): Nome da coluna a ser comparada na primeira planilha.
+        arquivo2 (str): Nome do arquivo da segunda planilha.
+        coluna2 (str): Nome da coluna a ser comparada na segunda planilha.
+        coluna_status (str): Nome da coluna de status na primeira planilha.
+        status (str): Valor do status para filtrar.
+        sufixo (str): Sufixo a ser removido da segunda coluna.
+    """
+
+    # Carregar os dados das planilhas
+    df1 = pd.read_excel(arquivo1)
+    df2 = pd.read_excel(arquivo2)
+
+    # Filtrar os dados da primeira planilha por status
+    df1_filtrado = df1[df1[coluna_status] == status]
+
+    # Remover o sufixo da segunda coluna e converter para minúsculas
+    df2[coluna2] = df2[coluna2].str.replace(sufixo, '').str.lower()
+
+    # Converter a coluna a ser comparada na primeira planilha para minúsculas
+    df1_filtrado[coluna1] = df1_filtrado[coluna1].str.lower()
+
+    # Encontrar os valores únicos da primeira planilha que não estão na segunda
+    valores_unicos = df1_filtrado[~df1_filtrado[coluna1].isin(df2[coluna2])][coluna1]
+
+    print(valores_unicos)
+
+# Exemplo de uso
+comparar_planilhas('planilha1.xlsx', 'Nome', 'planilha2.xlsx', 'Hostname', 'Status', 'Power On', '.dominio.com')
