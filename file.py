@@ -43,3 +43,53 @@ def compare_and_plot(file1, column1, file2, column2, similarity_threshold=0.5):
 
 # Exemplo de uso
 compare_and_plot('planilha1.xlsx', 'ColunaA', 'planilha2.xlsx', 'ColunaB', 0.7)
+
+
+
+import pandas as pd
+
+def comparar_strings(arquivo1, coluna1, arquivo2, coluna2, sufixo):
+    """
+    Compara as strings de duas colunas, ignorando o sufixo e a case.
+
+    Args:
+        arquivo1 (str): Nome do arquivo da primeira planilha.
+        coluna1 (str): Nome da coluna a ser comparada na primeira planilha.
+        arquivo2 (str): Nome do arquivo da segunda planilha.
+        coluna2 (str): Nome da coluna a ser comparada na segunda planilha.
+        sufixo (str): Sufixo a ser removido da segunda coluna.
+
+    Returns:
+        list: Lista de strings da primeira coluna que não foram encontradas na segunda.
+    """
+
+    # Carregar os dados das planilhas
+    df1 = pd.read_excel(arquivo1)
+    df2 = pd.read_excel(arquivo2)
+
+    # Remover o sufixo da segunda coluna e converter para minúsculas
+    df2[coluna2] = df2[coluna2].str.replace(sufixo, '').str.lower()
+
+    # Converter a primeira coluna para minúsculas
+    df1[coluna1] = df1[coluna1].str.lower()
+
+    # Criar um conjunto para verificar a existência de cada string na segunda coluna de forma eficiente
+    conjunto_strings2 = set(df2[coluna2])
+
+    # Comparar as strings e retornar as que não foram encontradas
+    nao_encontradas = []
+    for string in df1[coluna1]:
+        if string not in conjunto_strings2:
+            nao_encontradas.append(string)
+
+    return nao_encontradas
+
+# Exemplo de uso
+arquivo1 = 'planilha1.xlsx'
+coluna1 = 'ColunaA'
+arquivo2 = 'planilha2.xlsx'
+coluna2 = 'ColunaB'
+sufixo = '.dominio.com'
+
+resultados = comparar_strings(arquivo1, coluna1, arquivo2, coluna2, sufixo)
+print(resultados)
