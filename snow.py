@@ -1,42 +1,41 @@
 import requests
 import pandas as pd
 
-def exportar_excel_servicenow(instance, table, query, output_file, user, password):
+def exportar_dados_servicenow_para_excel(instance, user, password, table_name, output_file):
     """
-    Exporta dados do ServiceNow para um arquivo Excel.
+    Exporta dados de uma tabela do ServiceNow para um arquivo Excel.
 
     Args:
         instance (str): URL da instância do ServiceNow.
-        table (str): Nome da tabela ServiceNow.
-        query (str): Query GlideRecord para filtrar os dados.
-        output_file (str): Nome do arquivo de saída.
-        user (str): Nome de usuário do ServiceNow.
-        password (str): Senha do usuário do ServiceNow.
+        user (str): Nome de usuário para autenticação.
+        password (str): Senha para autenticação.
+        table_name (str): Nome da tabela (ou view) a ser consultada.
+        output_file (str): Nome do arquivo Excel de saída.
     """
 
-    # URL da API REST
-    url = f"{instance}/api/now/table/{table}?sysparm_query={query}"
+    # Construir a URL da API
+    url = f"{instance}/api/now/table/{table_name}"
 
-    # Autenticação básica
+    # Cabeçalho de autenticação básica
     auth = (user, password)
 
-    # Fazer a requisição GET
+    # Fazer a requisição GET à API
     response = requests.get(url, auth=auth)
-    data = response.json()['result']
+    data = response.json()
 
-    # Criar um DataFrame Pandas
-    df = pd.DataFrame(data)
+    # Converter os dados para um DataFrame do pandas
+    df = pd.DataFrame(data['result'])
 
-    # Exportar para Excel
+    # Exportar os dados para um arquivo Excel
     df.to_excel(output_file, index=False)
 
-    print(f"Dados exportados para {output_file}")
+    print(f"Dados exportados com sucesso para {output_file}")
 
+# Exemplo de uso:
 instance = "https://your_instance.service-now.com"
-table = "incident"
-query = "active=true^assignment_group=your_group"
-output_file = "incidentes_ativos.xlsx"
-user = "your_user"
-password = "your_password"
+user = "seu_usuario"
+password = "sua_senha"
+table_name = "your_table_name"
+output_file = "dados_servicenow.xlsx"
 
-exportar_excel_servicenow(instance, table, query, output_file, user, password)
+exportar_dados_servicenow_para_excel(instance, user, password, table_name, output_file)
