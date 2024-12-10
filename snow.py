@@ -31,3 +31,12 @@ def exportar_excel_servicenow(instance, table, query, output_file, user, passwor
     df.to_excel(output_file, index=False)
 
     print(f"Dados exportados para {output_file}")
+
+instance = "https://your_instance.service-now.com"
+table = "incident"
+query = "active=true^assignment_group=your_group"
+output_file = "incidentes_ativos.xlsx"
+user = "your_user"
+password = "your_password"
+
+exportar_excel_servicenow(instance, table, query, output_file, user, password)
