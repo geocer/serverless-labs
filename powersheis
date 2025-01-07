@@ -1,0 +1,13 @@
+# Solicita ao usuário o domínio, usuário e senha
+$dominio = Read-Host "Digite o nome do domínio"
+$usuario = Read-Host "Digite o nome do usuário"
+$credencial = Get-Credential -Message "Digite a senha"
+
+# Tenta conectar ao domínio usando o usuário e senha fornecidos
+try {
+    Test-Connection -ComputerName $dominio\$usuario -Credential $credencial -Quiet
+    Write-Host "A autenticação foi bem-sucedida!"
+}
+catch {
+    Write-Host "A autenticação falhou!"
+}
