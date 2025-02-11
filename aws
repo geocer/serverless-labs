@@ -1,0 +1,8 @@
+aws eks update-nodegroup-config \
+    --cluster-name <nome_do_cluster> \
+    --nodegroup-name <nome_do_nodegroup> \
+    --scaling-config desiredSize=<número_de_nós>,minSize=<número_mínimo_de_nós>,maxSize=<número_máximo_de_nós>
+aws eks update-nodegroup-config \
+    --cluster-name <nome_do_cluster> \
+    --nodegroup-name <nome_do_nodegroup> \
+    --scaling-config desiredSize=<número_de_nós>,minSize=<número_mínimo_de_nós>,maxSize=<número_máximo_de_nós>
