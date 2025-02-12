@@ -6,3 +6,38 @@ aws eks update-nodegroup-config \
     --cluster-name <nome_do_cluster> \
     --nodegroup-name <nome_do_nodegroup> \
     --scaling-config desiredSize=<número_de_nós>,minSize=<número_mínimo_de_nós>,maxSize=<número_máximo_de_nós>
+
+Alta disponibilidade (High Availability) vs. Tolerância a falhas (Fault Tolerance) no AWS EKS
+Em resumo, alta disponibilidade significa que seu aplicativo estará acessível a maior parte do tempo, enquanto tolerância a falhas significa que seu aplicativo continuará funcionando mesmo diante de falhas.
+Alta disponibilidade (High Availability)
+Garante que o serviço continue operacional, minimizando o tempo de inatividade. Em caso de falha, o sistema se recupera rapidamente, voltando a funcionar em um curto período.
+Tolerância a falhas (Fault Tolerance)
+Permite que o sistema continue operando mesmo com a falha de um ou mais componentes. A falha é "tolerada" sem interrupção do serviço.
+Qual a melhor configuração no AWS EKS?
+Para alcançar alta disponibilidade e tolerância a falhas no AWS EKS, você deve combinar diferentes estratégias, explorando os recursos oferecidos pelas Zonas de Disponibilidade (AZs) e Kubernetes:
+Zonas de Disponibilidade (AZs)
+ * Distribua seus nós do EKS por diferentes AZs para evitar que uma falha em uma AZ cause a indisponibilidade do seu aplicativo.
+ * Utilize um Load Balancer (ALB ou NLB) para distribuir o tráfego entre os nós em diferentes AZs.
+Kubernetes
+ * Réplicas: Crie múltiplas réplicas dos seus pods para que, se um pod falhar, outros continuem em execução.
+ * Affinity e Anti-affinity:*
+   * Affinity: Permite agendar pods em nós com características específicas (ex: mesmo tipo de hardware, mesma AZ).
+   * Anti-affinity: Impede que pods do mesmo serviço sejam agendados no mesmo nó, aumentando a resiliência a falhas.
+ * Taints e Tolerations:*
+   * Taints: "Marcam" nós com características específicas, impedindo que pods "não tolerantes" sejam agendados neles.
+   * Tolerations: Permitem que pods sejam agendados em nós com taints específicos.
+ * Liveness e Readiness Probes: Verificam periodicamente a saúde dos pods, permitindo que o Kubernetes os reinicie em caso de falha.
+ * Resource Limits e Requests: Garantem que os pods tenham recursos suficientes para funcionar, evitando que a falta de recursos cause falhas.
+Exemplo de configuração
+ * Nós em AZs: Distribua seus nós do EKS em pelo menos 3 AZs.
+ * Load Balancer: Utilize um ALB para distribuir o tráfego entre os nós.
+ * Réplicas: Defina pelo menos 3 réplicas para seus pods.
+ * Anti-affinity: Utilize anti-affinity para evitar que pods do mesmo serviço sejam agendados no mesmo nó.
+ * Taints e Tolerations: Utilize taints para "marcar" nós com hardware específico (ex: GPUs) e tolerations para permitir que pods que precisam desse hardware sejam agendados neles.
+ * Probes: Configure liveness e readiness probes para garantir que pods com falhas sejam reiniciados.
+ * Recursos: Defina resource limits e requests para seus pods.
+Observações
+ * A configuração ideal dependerá das necessidades específicas do seu aplicativo.
+ * É importante monitorar seu cluster EKS para identificar e corrigir gargalos e possíveis pontos de falha.
+ * Utilize ferramentas de observabilidade e monitoramento para acompanhar a saúde do seu aplicativo e infraestrutura.
+Ao combinar as estratégias mencionadas, você poderá criar um ambiente AWS EKS altamente disponível e tolerante a falhas, garantindo que seu aplicativo esteja sempre acessível e funcionando corretamente.
