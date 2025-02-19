@@ -1,0 +1,78 @@
+import boto3
+import csv
+
+def listar_instancias_e_extrair_tag(regiao):
+    """
+    Lista todas as instâncias EC2 em uma região e extrai a tag "Responsável".
+
+    Args:
+        regiao: A região da AWS a ser consultada (ex: 'us-east-1').
+
+    Returns:
+        Uma lista de dicionários, onde cada dicionário representa uma instância
+        e contém o nome, ID e responsável (ou "não identificado").
+    """
+
+    ec2 = boto3.client('ec2', region_name=regiao)
+    instancias = []
+
+    try:
+        resposta = ec2.describe_instances()
+        for reserva in resposta['Reservations']:
+            for instancia in reserva['Instances']:
+                nome = ''
+                for tag in instancia.get('Tags', []):
+                    if tag['Key'] == 'Name':
+                        nome = tag['Value']
+                        break
+
+                responsavel = ''
+                for tag in instancia.get('Tags', []):
+                    if tag['Key'] == 'Responsável':
+                        responsavel = tag['Value']
+                        break
+
+                instancias.append({
+                    'Nome': nome,
+                    'ID': instancia['InstanceId'],
+                    'Responsável': responsavel if responsavel else 'Não Identificado'
+                })
+
+        return instancias
+
+    except Exception as e:
+        print(f"Erro ao listar instâncias: {e}")
+        return []
+
+
+def salvar_em_csv(instancias, nome_arquivo):
+    """
+    Salva a lista de instâncias em um arquivo CSV.
+
+    Args:
+        instancias: A lista de dicionários contendo os dados das instâncias.
+        nome_arquivo: O nome do arquivo CSV a ser criado.
+    """
+
+    try:
+        with open(nome_arquivo, 'w', newline='', encoding='utf-8') as arquivo_csv:
+            campos = ['Nome', 'ID', 'Responsável']
+            escritor = csv.DictWriter(arquivo_csv, fieldnames=campos)
+
+            escritor.writeheader()
+            escritor.writerows(instancias)
+
+        print(f"Dados salvos em {nome_arquivo}")
+
+    except Exception as e:
+        print(f"Erro ao salvar em CSV: {e}")
+
+
+# Exemplo de uso
+regiao = 'us-east-1'  # Substitua pela sua região
+nome_arquivo = 'instancias_com_responsavel.csv'
+
+instancias = listar_instancias_e_extrair_tag(regiao)
+
+if instancias:
+    salvar_em_csv(instancias, nome_arquivo)
