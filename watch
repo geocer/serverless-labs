@@ -1,0 +1,15 @@
+sudo apt install -y collectd-core
+
+wget https://aws-cloudwatch-agent.s3.amazonaws.com/aws-cloudwatch-agent_latest.deb
+sudo dpkg -i aws-cloudwatch-agent_latest.deb
+sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl status
+
+
+curl https://aws-cloudwatch-agent.s3.amazonaws.com/amazon-cloudwatch-agent-install-script.sh -o amazon-cloudwatch-agent-install-script.sh
+chmod +x amazon-cloudwatch-agent-install-script.sh
+sudo ./amazon-cloudwatch-agent-install-script.sh
+
+
+sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon/amazon-cloudwatch-agent.toml -s
+sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl -a stop
+sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl status
