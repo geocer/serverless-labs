@@ -32,3 +32,13 @@ aws cloudwatch put-metric-alarm \
     --comparison-operator GreaterThanThreshold \
     --alarm-actions "arn:aws:sns:us-east-1:123456789012:AlertasCloudWatch" \
     --ok-actions "arn:aws:sns:us-east-1:123456789012:AlertasCloudWatch"
+
+aws sns create-topic --name "NomeDoSeuTopico"
+
+aws sns subscribe \
+    --topic-arn "arn:aws:sns:SUA_REGIAO:SUA_CONTA:NomeDoSeuTopico" \
+    --protocol email \
+    --endpoint "seu_email@exemplo.com"
+
+
+
