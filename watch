@@ -13,3 +13,22 @@ sudo ./amazon-cloudwatch-agent-install-script.sh
 sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon/amazon-cloudwatch-agent.toml -s
 sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl -a stop
 sudo /opt/aws/amazon-cloudwatch-agent/bin/aws-cloudwatch-agent-ctl status
+
+
+aws iam attach-role-policy \
+    --role-name "NomeDaRoleFilha" \
+    --policy-arn "arn:aws:iam::123456789012:policy/NomeDaPolitica"
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name "CPU-Utilizacao-Critica" \
+    --alarm-description "Alarme para uso de CPU acima de 95%" \
+    --metric-name "CPUUtilization" \
+    --namespace "AWS/EC2" \
+    --statistic "Average" \
+    --dimensions "InstanceId=i-xxxxxxxxxxxxxxxxx" \
+    --period 60 \
+    --evaluation-periods 5 \
+    --threshold 95 \
+    --comparison-operator GreaterThanThreshold \
+    --alarm-actions "arn:aws:sns:us-east-1:123456789012:AlertasCloudWatch" \
+    --ok-actions "arn:aws:sns:us-east-1:123456789012:AlertasCloudWatch"
