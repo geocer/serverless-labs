@@ -1,0 +1,29 @@
+service: meu-servico-sns
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x # ou outro runtime de sua preferência
+  region: sua-regiao # Substitua pela sua região AWS
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sns:CreateTopic
+            - sns:Subscribe
+          Resource: "*"
+
+resources:
+  Resources:
+    MeuTopicoSNS:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: NomeDoSeuTopico
+    InscricaoEmail:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref MeuTopicoSNS
+        Protocol: email
+        Endpoint: seu_email@exemplo.com
