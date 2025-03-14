@@ -81,3 +81,4 @@ def validate_ec2_stopped(ec2_stopped):
     
     notify.append("" + instance_ids + ":" + instance['State']['Name'] + " - Responsável: " + next((tag['Value'] for tag in instance['Tags'] if tag['Key'] == 'responsável'), 'Não encontrado') + "")
 
+print(f"Instance {instance_id}: System Status {system_status}, Instance Status {instance_status_check}, Responsável: {next((tag['Value'] for tag in status_checks['InstanceStatuses'][0]['Tags'] if tag['Key'] == 'Responsavel'), 'Não encontrado')}")
