@@ -79,4 +79,5 @@ def validate_ec2_stopped(ec2_stopped):
         # Adicione aqui o código para enviar uma mensagem de sucesso, se necessário
 
     
-    
+    notify.append("" + instance_ids + ":" + instance['State']['Name'] + " - Responsável: " + next((tag['Value'] for tag in instance['Tags'] if tag['Key'] == 'responsável'), 'Não encontrado') + "")
+
