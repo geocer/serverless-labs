@@ -90,3 +90,63 @@ def volume_created(event, context):
     except Exception as e:
         print(f"Erro ao processar o evento de criação de volume: {e}")
 
+import boto3
+import json
+from datetime import datetime, timezone, timedelta
+
+def volume_created(event, context):
+    print("Event received:", json.dumps(event))
+
+    ec2 = boto3.client('ec2')
+    volume_id = event['detail']['responseElements']['volumeId']
+    volume_creation_time_str = event['detail']['responseElements']['createTime']
+
+    # Convert volume creation time to datetime object (assuming UTC)
+    volume_creation_time = datetime.fromisoformat(volume_creation_time_str.replace("Z", "+00:00"))
+
+    try:
+        volume_response = ec2.describe_volumes(VolumeIds=[volume_id])
+        volume = volume_response['Volumes'][0]
+        attachments = volume.get('Attachments', [])
+
+        if attachments:
+            instance_id = attachments[0]['InstanceId']
+            print(f"Volume {volume_id} is attached to instance {instance_id}.")
+
+            instance_response = ec2.describe_instances(InstanceIds=[instance_id])
+            instance = instance_response['Reservations'][0]['Instances'][0]
+            instance_launch_time = instance['LaunchTime']
+
+            time_threshold_minutes = int(os.environ.get('TIME_THRESHOLD_MINUTES', 5))
+            time_difference = abs((volume_creation_time - instance_launch_time).total_seconds()) / 60
+
+            print(f"Volume creation time: {volume_creation_time}")
+            print(f"Instance launch time: {instance_launch_time}")
+            print(f"Time difference (minutes): {time_difference}")
+
+            if time_difference <= time_threshold_minutes:
+                print(f"Volume {volume_id} creation time is within {time_threshold_minutes} minutes of instance {instance_id} launch time.")
+                # Add your notification logic here (e.g., send to SNS, Slack, etc.)
+            else:
+                print(f"Volume {volume_id} creation time is NOT within {time_threshold_minutes} minutes of instance {instance_id} launch time.")
+        else:
+            print(f"Volume {volume_id} is not currently attached to any instance.")
+            # Optionally add notification logic for unattached volumes
+
+    except Exception as e:
+        print(f"Error processing volume {volume_id}: {e}")
+
+if __name__ == "__main__":
+    # Example Event Data (for local testing) - Replace with a real CloudTrail CreateVolume event
+    example_event = {
+        "detail": {
+            "eventSource": "ec2.amazonaws.com",
+            "eventName": "CreateVolume",
+            "responseElements": {
+                "volumeId": "vol-xxxxxxxxxxxxxxxxx",
+                "createTime": "2025-03-18T13:30:00.000Z"
+            }
+        }
+    }
+    volume_created(example_event, None)
+
