@@ -132,3 +132,114 @@ spec:
       dnsPolicy: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.dnsPolicy }}
       {{- end }}
       {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.
+
+dynakube:
+  name: dynakube
+  namespace: dynatrace
+  apiUrl: "https://ENVIRONMENTID.live.dynatrace.com/api"
+  tokens: ""
+  customPullSecret: "custom-pull-secret"
+  skipCertCheck: false
+  proxy:
+    value: "my-proxy-url.com"
+    valueFrom: ""
+  trustedCAs: "my-ca-configmap"
+  networkZone: "my-network-zone"
+  enableIstio: true
+  dynatraceApiRequestThreshold: 15
+  metadataEnrichment:
+    enabled: true
+    namespaceSelector:
+      matchLabels:
+        app: "my-app"
+      matchExpressions:
+        - key: "app"
+          operator: "In"
+          values:
+            - "my-frontend"
+            - "my-backend"
+            - "my-database"
+  oneAgent:
+    hostGroup: ""
+    cloudNativeFullStack:
+      namespaceSelector:
+        matchLabels:
+          app: "my-app"
+        matchExpressions:
+          - key: "app"
+            operator: "In"
+            values:
+              - "my-frontend"
+              - "my-backend"
+              - "my-database"
+      nodeSelector:
+        node.kubernetes.io/os: linux
+      priorityClassName: "priority-class"
+      tolerations:
+        - effect: "NoSchedule"
+          key: "node-role.kubernetes.io/master"
+          operator: "Exists"
+        - effect: "NoSchedule"
+          key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+      oneAgentResources:
+        requests:
+          cpu: "100m"
+          memory: "512Mi"
+        limits:
+          cpu: "300m"
+          memory: "1.5Gi"
+      args: []
+      env: []
+      autoUpdate: true
+      dnsPolicy: "ClusterFirstWithHostNet"
+      annotations:
+        custom: "annotation"
+      labels:
+        custom: "label"
+      image: ""
+      version: ""
+      initResources:
+        requests:
+          cpu: "30m"
+          memory: "30Mi"
+        limits:
+          cpu: "100m"
+          memory: "60Mi"
+      codeModulesImage: ""
+      secCompProfile: ""
+  activeGate:
+    capabilities:
+      - "routing"
+      - "kubernetes-monitoring"
+      - "dynatrace-api"
+    replicas: 1
+    image: ""
+    group: ""
+    customProperties:
+      value: |
+        [connectivity]
+        networkZone=
+      valueFrom: "myCustomPropertiesSecret"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1.5Gi"
+    nodeSelector: {}
+    tolerations:
+      - effect: "NoSchedule"
+        key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+    labels:
+      custom: "label"
+    env: []
+    tlsSecretName: "my-tls-secret"
+    dnsPolicy: "Default"
+    priorityClassName: "priority-class"
+    annotations:
+      custom: "annotation"
+    topologySpreadConstraints: []
+
