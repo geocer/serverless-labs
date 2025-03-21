@@ -1,0 +1,134 @@
+apiVersion: v2
+name: dynakube-chart
+description: A Helm chart for Dynakube
+type: application
+version: 0.1.0
+appVersion: "1.0.0" # Or the version of Dynatrace you are using
+
+
+apiVersion: dynatrace.com/v1beta2
+kind: DynaKube
+metadata:
+  name: {{ .Values.dynakube.name }}
+  namespace: {{ .Values.dynakube.namespace }}
+spec:
+  apiUrl: {{ .Values.dynakube.apiUrl }}
+  {{- if .Values.dynakube.tokens }}
+  tokens: {{ .Values.dynakube.tokens }}
+  {{- end }}
+  {{- if .Values.dynakube.customPullSecret }}
+  customPullSecret: {{ .Values.dynakube.customPullSecret }}
+  {{- end }}
+  {{- if .Values.dynakube.skipCertCheck }}
+  skipCertCheck: {{ .Values.dynakube.skipCertCheck }}
+  {{- end }}
+  {{- if .Values.dynakube.proxy }}
+  proxy:
+    {{- if .Values.dynakube.proxy.value }}
+    value: {{ .Values.dynakube.proxy.value }}
+    {{- end }}
+    {{- if .Values.dynakube.proxy.valueFrom }}
+    valueFrom: {{ .Values.dynakube.proxy.valueFrom }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.dynakube.trustedCAs }}
+  trustedCAs: {{ .Values.dynakube.trustedCAs }}
+  {{- end }}
+  {{- if .Values.dynakube.networkZone }}
+  networkZone: {{ .Values.dynakube.networkZone }}
+  {{- end }}
+  {{- if .Values.dynakube.enableIstio }}
+  enableIstio: {{ .Values.dynakube.enableIstio }}
+  {{- end }}
+  {{- if .Values.dynakube.dynatraceApiRequestThreshold }}
+  dynatraceApiRequestThreshold: {{ .Values.dynakube.dynatraceApiRequestThreshold }}
+  {{- end }}
+  metadataEnrichment:
+    {{- if .Values.dynakube.metadataEnrichment.enabled }}
+    enabled: {{ .Values.dynakube.metadataEnrichment.enabled }}
+    {{- end }}
+    {{- if .Values.dynakube.metadataEnrichment.namespaceSelector }}
+    namespaceSelector:
+      {{- if .Values.dynakube.metadataEnrichment.namespaceSelector.matchLabels }}
+      matchLabels:
+        {{- range $key, $value := .Values.dynakube.metadataEnrichment.namespaceSelector.matchLabels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.metadataEnrichment.namespaceSelector.matchExpressions }}
+      matchExpressions:
+        {{- range $expression := .Values.dynakube.metadataEnrichment.namespaceSelector.matchExpressions }}
+        - key: {{ $expression.key }}
+          operator: {{ $expression.operator }}
+          values: {{ $expression.values }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  oneAgent:
+    {{- if .Values.dynakube.oneAgent.hostGroup }}
+    hostGroup: {{ .Values.dynakube.oneAgent.hostGroup }}
+    {{- end }}
+    cloudNativeFullStack:
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.namespaceSelector }}
+      namespaceSelector:
+        {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.namespaceSelector.matchLabels }}
+        matchLabels:
+          {{- range $key, $value := .Values.dynakube.oneAgent.cloudNativeFullStack.namespaceSelector.matchLabels }}
+          {{ $key }}: {{ $value }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.namespaceSelector.matchExpressions }}
+        matchExpressions:
+          {{- range $expression := .Values.dynakube.oneAgent.cloudNativeFullStack.namespaceSelector.matchExpressions }}
+          - key: {{ $expression.key }}
+            operator: {{ $expression.operator }}
+            values: {{ $expression.values }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.nodeSelector }}
+      nodeSelector:
+        {{- range $key, $value := .Values.dynakube.oneAgent.cloudNativeFullStack.nodeSelector }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.priorityClassName }}
+      priorityClassName: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.priorityClassName }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.tolerations }}
+      tolerations:
+        {{- range $toleration := .Values.dynakube.oneAgent.cloudNativeFullStack.tolerations }}
+        - effect: {{ $toleration.effect }}
+          key: {{ $toleration.key }}
+          operator: {{ $toleration.operator }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.oneAgentResources }}
+      oneAgentResources:
+        requests:
+          cpu: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.oneAgentResources.requests.cpu }}
+          memory: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.oneAgentResources.requests.memory }}
+        limits:
+          cpu: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.oneAgentResources.limits.cpu }}
+          memory: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.oneAgentResources.limits.memory }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.args }}
+      args:
+        {{- range $arg := .Values.dynakube.oneAgent.cloudNativeFullStack.args }}
+        - {{ $arg }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.env }}
+      env:
+        {{- range $env := .Values.dynakube.oneAgent.cloudNativeFullStack.env }}
+        - name: {{ $env.name }}
+          value: {{ $env.value }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.autoUpdate }}
+      autoUpdate: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.autoUpdate }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.dnsPolicy }}
+      dnsPolicy: {{ .Values.dynakube.oneAgent.cloudNativeFullStack.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.dynakube.oneAgent.cloudNativeFullStack.
