@@ -1,0 +1,59 @@
+import requests
+from datetime import datetime, timedelta
+
+jenkins_url = "SUA_URL_DO_JENKINS"  # Substitua pela URL do seu Jenkins
+username = "SEU_USUARIO"          # Substitua pelo seu nome de usuário do Jenkins
+api_token = "SEU_TOKEN_API"      # Substitua pelo seu token de API do Jenkins
+
+def get_all_jobs():
+    auth = (username, api_token)
+    url = f"{jenkins_url}/api/json?tree=jobs[name,url]"
+    try:
+        response = requests.get(url, auth=auth)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('jobs', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao obter a lista de jobs: {e}")
+        return []
+
+def get_last_builds_details(job_url):
+    auth = (username, api_token)
+    url = f"{job_url}api/json?tree=builds[number,timestamp]"
+    try:
+        response = requests.get(url, auth=auth)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('builds', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao obter detalhes das builds para {job_url}: {e}")
+        return []
+
+def list_recent_pipelines(months=6):
+    jobs = get_all_jobs()
+    recent_pipelines = {}
+    cutoff_date = datetime.now() - timedelta(days=months * 30)
+
+    for job in jobs:
+        job_name = job['name']
+        job_url = job['url']
+        builds = get_last_builds_details(job_url)
+
+        if builds:
+            last_build = builds[0]
+            timestamp_ms = last_build['timestamp']
+            build_date = datetime.fromtimestamp(timestamp_ms / 1000)
+
+            if build_date >= cutoff_date:
+                recent_pipelines[job_name] = build_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    return recent_pipelines
+
+if __name__ == "__main__":
+    recent_pipelines = list_recent_pipelines()
+    if recent_pipelines:
+        print("Pipelines usados nos últimos 6 meses:")
+        for name, last_used in recent_pipelines.items():
+            print(f"- {name}: {last_used}")
+    else:
+        print("Nenhum pipeline usado nos últimos 6 meses.")
