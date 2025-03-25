@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 
 jenkins_url = "SUA_URL_DO_JENKINS"  # Substitua pela URL do seu Jenkins
 username = "SEU_USUARIO"          # Substitua pelo seu nome de usuário do Jenkins
-api_token = "SEU_TOKEN_API"      # Substitua pelo seu token de API do Jenkins
+password = "SUA_SENHA"            # Substitua pela sua senha do Jenkins
 
-# Configurações de proxy (substitua pelos seus servidores proxy)
+# Configurações de proxy (opcional)
 http_proxy = "http://SEU_PROXY_HTTP:PORTA"
 https_proxy = "https://SEU_PROXY_HTTPS:PORTA"
 
@@ -15,7 +15,7 @@ proxies = {
 }
 
 def get_all_jobs():
-    auth = (username, api_token)
+    auth = (username, password)
     url = f"{jenkins_url}/api/json?tree=jobs[name,url]"
     try:
         response = requests.get(url, auth=auth, proxies=proxies)
@@ -27,7 +27,7 @@ def get_all_jobs():
         return []
 
 def get_last_builds_details(job_url):
-    auth = (username, api_token)
+    auth = (username, password)
     url = f"{job_url}api/json?tree=builds[number,timestamp]"
     try:
         response = requests.get(url, auth=auth, proxies=proxies)
