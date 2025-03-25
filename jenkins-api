@@ -5,11 +5,20 @@ jenkins_url = "SUA_URL_DO_JENKINS"  # Substitua pela URL do seu Jenkins
 username = "SEU_USUARIO"          # Substitua pelo seu nome de usuário do Jenkins
 api_token = "SEU_TOKEN_API"      # Substitua pelo seu token de API do Jenkins
 
+# Configurações de proxy (substitua pelos seus servidores proxy)
+http_proxy = "http://SEU_PROXY_HTTP:PORTA"
+https_proxy = "https://SEU_PROXY_HTTPS:PORTA"
+
+proxies = {
+    "http": http_proxy,
+    "https": https_proxy,
+}
+
 def get_all_jobs():
     auth = (username, api_token)
     url = f"{jenkins_url}/api/json?tree=jobs[name,url]"
     try:
-        response = requests.get(url, auth=auth)
+        response = requests.get(url, auth=auth, proxies=proxies)
         response.raise_for_status()
         data = response.json()
         return data.get('jobs', [])
@@ -21,7 +30,7 @@ def get_last_builds_details(job_url):
     auth = (username, api_token)
     url = f"{job_url}api/json?tree=builds[number,timestamp]"
     try:
-        response = requests.get(url, auth=auth)
+        response = requests.get(url, auth=auth, proxies=proxies)
         response.raise_for_status()
         data = response.json()
         return data.get('builds', [])
