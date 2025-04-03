@@ -1,0 +1,189 @@
+# Procedimento para Adicionar Script no Bootstrap de Instância Linux com Verificação de Serviços systemd
+
+## Objetivo
+Criar um script que será executado durante o bootstrap (inicialização) de uma instância Linux para verificar se serviços systemd específicos foram inicializados com sucesso e, caso contrário, realizar tentativas de reinicialização.
+
+## Pré-requisitos
+- Instância Linux com systemd
+- Acesso root ou sudo
+- Conhecimento dos serviços que precisam ser verificados
+
+## Passo a Passo
+
+### 1. Criar o script de verificação
+
+```bash
+#!/bin/bash
+
+# Nome: check-systemd-services.sh
+# Localização recomendada: /usr/local/bin/
+
+# Lista de serviços para verificar (ajuste conforme necessidade)
+SERVICES=("nginx.service" "mysql.service" "docker.service")
+
+# Número máximo de tentativas
+MAX_RETRIES=3
+# Intervalo entre tentativas (em segundos)
+RETRY_INTERVAL=10
+
+# Função para verificar e reiniciar serviços
+check_and_restart_services() {
+    local retry_count=0
+    local failed_services=()
+    
+    # Verificação inicial
+    for service in "${SERVICES[@]}"; do
+        if ! systemctl is-active --quiet "$service"; then
+            failed_services+=("$service")
+        fi
+    done
+    
+    # Se todos os serviços estão ativos, sair com sucesso
+    if [ ${#failed_services[@]} -eq 0 ]; then
+        echo "Todos os serviços estão rodando corretamente."
+        return 0
+    fi
+    
+    # Tentativas de reinicialização
+    while [ $retry_count -lt $MAX_RETRIES ]; do
+        ((retry_count++))
+        echo "Tentativa $retry_count de $MAX_RETRIES para reiniciar serviços falhos: ${failed_services[*]}"
+        
+        for service in "${failed_services[@]}"; do
+            echo "Reiniciando $service..."
+            systemctl restart "$service"
+            sleep $RETRY_INTERVAL
+        done
+        
+        # Verificar novamente após reinicialização
+        local still_failed=()
+        for service in "${failed_services[@]}"; do
+            if ! systemctl is-active --quiet "$service"; then
+                still_failed+=("$service")
+            fi
+        done
+        
+        if [ ${#still_failed[@]} -eq 0 ]; then
+            echo "Todos os serviços foram reiniciados com sucesso após $retry_count tentativa(s)."
+            return 0
+        fi
+        
+        failed_services=("${still_failed[@]}")
+        sleep $RETRY_INTERVAL
+    done
+    
+    echo "Falha ao iniciar os seguintes serviços após $MAX_RETRIES tentativas: ${failed_services[*]}"
+    return 1
+}
+
+# Executar a função principal
+check_and_restart_services
+
+# Registrar o resultado para systemd
+if [ $? -eq 0 ]; then
+    echo "SUCCESS" > /var/run/systemd-service-check.status
+else
+    echo "FAILED" > /var/run/systemd-service-check.status
+    exit 1
+fi
+```
+
+### 2. Tornar o script executável
+
+```bash
+sudo chmod +x /usr/local/bin/check-systemd-services.sh
+```
+
+### 3. Criar uma unidade de serviço systemd para executar o script
+
+Crie o arquivo `/etc/systemd/system/check-services.service`:
+
+```ini
+[Unit]
+Description=Verifica e reinicia serviços systemd essenciais
+After=network.target nginx.service mysql.service docker.service
+Requires=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/check-systemd-services.sh
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 4. Habilitar e iniciar o serviço
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable check-services.service
+sudo systemctl start check-services.service
+```
+
+### 5. (Opcional) Adicionar ao bootstrap da instância
+
+Dependendo de como sua instância é provisionada, você pode:
+
+#### Para cloud-init (usuários AWS, Azure, GCP, etc.):
+Adicione ao seu user-data:
+
+```yaml
+#cloud-config
+
+runcmd:
+  - curl -o /usr/local/bin/check-systemd-services.sh https://seuservidor.com/check-systemd-services.sh
+  - chmod +x /usr/local/bin/check-systemd-services.sh
+  - cat > /etc/systemd/system/check-services.service <<EOF
+[Unit]
+Description=Verifica e reinicia serviços systemd essenciais
+After=network.target nginx.service mysql.service docker.service
+Requires=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/check-systemd-services.sh
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  - systemctl daemon-reload
+  - systemctl enable check-services.service
+  - systemctl start check-services.service
+```
+
+#### Para sistemas que usam /etc/rc.local:
+Adicione a seguinte linha antes do `exit 0`:
+
+```bash
+/usr/local/bin/check-systemd-services.sh &
+```
+
+## Verificação
+
+1. Verifique o status do serviço:
+```bash
+systemctl status check-services.service
+```
+
+2. Verifique o log:
+```bash
+journalctl -u check-services.service -b
+```
+
+3. Verifique o arquivo de status:
+```bash
+cat /var/run/systemd-service-check.status
+```
+
+## Considerações
+
+1. Ajuste a lista `SERVICES` no script para incluir os serviços que você precisa monitorar.
+2. Modifique `MAX_RETRIES` e `RETRY_INTERVAL` conforme necessário para sua aplicação.
+3. Para ambientes críticos, considere adicionar notificações (email, Slack, etc.) quando o script falhar.
+4. Em sistemas cloud, você pode querer encerrar a instância se serviços essenciais não iniciarem.
+
+Este procedimento garante que seus serviços essenciais sejam verificados durante o bootstrap e tenta recuperá-los automaticamente em caso de falha.
