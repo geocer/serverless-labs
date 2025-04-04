@@ -187,3 +187,123 @@ cat /var/run/systemd-service-check.status
 4. Em sistemas cloud, você pode querer encerrar a instância se serviços essenciais não iniciarem.
 
 Este procedimento garante que seus serviços essenciais sejam verificados durante o bootstrap e tenta recuperá-los automaticamente em caso de falha.
+
+#!/bin/bash
+
+# Nome: check-systemd-services.sh
+# Localização recomendada: /usr/local/bin/
+
+# Lista de serviços para verificar (ajuste conforme necessidade)
+SERVICES=("nginx" "mysql" "docker")
+
+# Número máximo de tentativas
+MAX_RETRIES=3
+# Intervalo entre tentativas (em segundos)
+RETRY_INTERVAL=10
+
+# Função para verificar se um serviço existe
+service_exists() {
+    local service=$1
+    systemctl list-unit-files --full --type=service | grep -q "^${service}\.service"
+    return $?
+}
+
+# Função principal
+check_and_restart_services() {
+    local retry_count=0
+    local failed_services=()
+    local valid_services=()
+
+    # Filtrar apenas serviços existentes
+    for service in "${SERVICES[@]}"; do
+        if service_exists "$service"; then
+            valid_services+=("${service}.service")
+        else
+            echo "Aviso: Serviço ${service}.service não encontrado no systemd"
+        fi
+    done
+
+    # Verificação inicial apenas para serviços válidos
+    for service in "${valid_services[@]}"; do
+        if ! systemctl is-active --quiet "$service"; then
+            echo "Serviço $service não está ativo"
+            failed_services+=("$service")
+        fi
+    done
+
+    if [ ${#failed_services[@]} -eq 0 ]; then
+        echo "Todos os serviços válidos estão rodando corretamente."
+        return 0
+    fi
+
+    # Tentativas de reinicialização
+    while [ $retry_count -lt $MAX_RETRIES ]; do
+        ((retry_count++))
+        echo "Tentativa $retry_count de $MAX_RETRIES para reiniciar serviços falhos: ${failed_services[*]}"
+        
+        for service in "${failed_services[@]}"; do
+            echo "Reiniciando $service..."
+            if ! systemctl restart "$service"; then
+                echo "Erro ao tentar reiniciar $service"
+            fi
+            sleep 2
+        done
+        
+        sleep $RETRY_INTERVAL
+        
+        local still_failed=()
+        for service in "${failed_services[@]}"; do
+            if ! systemctl is-active --quiet "$service"; then
+                still_failed+=("$service")
+            fi
+        done
+        
+        if [ ${#still_failed[@]} -eq 0 ]; then
+            echo "Serviços reiniciados com sucesso após $retry_count tentativa(s)."
+            return 0
+        fi
+        
+        failed_services=("${still_failed[@]}")
+    done
+    
+    echo "ERRO: Falha ao iniciar os serviços após $MAX_RETRIES tentativas: ${failed_services[*]}"
+    
+    # Log detalhado para diagnóstico
+    for service in "${failed_services[@]}"; do
+        echo -e "\n--- Status do serviço $service ---"
+        systemctl status "$service" --no-pager
+        journalctl -u "$service" -n 10 --no-pager
+    done
+    
+    return 1
+}
+
+# Verificar se systemctl está disponível
+if ! command -v systemctl >/dev/null; then
+    echo "ERRO: systemctl não encontrado. Este script requer systemd."
+    exit 1
+fi
+
+# Executar a função principal
+check_and_restart_services
+exit_code=$?
+
+# Registrar o resultado
+mkdir -p /var/run/
+echo $exit_code > /var/run/systemd-service-check.status
+exit $exit_code
+
+service_exists() {
+    local service=$1
+    # Caso especial para mysql/mariadb
+    if [[ "$service" == "mysql" ]]; then
+        if systemctl list-unit-files --full --type=service | grep -q "^mariadb\.service"; then
+            return 0
+        fi
+    fi
+    systemctl list-unit-files --full --type=service | grep -q "^${service}\.service"
+    return $?
+}
+
+
+
