@@ -45,3 +45,13 @@ aws ec2 describe-instances \
     echo "Instance ID: $instance_id, Uptime: $uptime_days days"
   done
 
+aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].[InstanceId, State.Name]" --output table
+
+aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue="i-SUA_INSTANCIA_EC2" \
+    --query 'Events[*].{EventTime: EventTime, EventName: EventName, Username: Username, EventSource: EventSource}' \
+    --filters EventName=RebootInstances \
+    --output table
+
+
+
