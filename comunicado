@@ -35,4 +35,13 @@ uptime_days=$(echo "scale=2; $uptime_seconds / 86400" | bc)
 
 echo "Uptime da instância $INSTANCE_ID: $uptime_days dias"
 
+aws ec2 describe-instances \
+  --query 'Reservations[*].Instances[*].[InstanceId, LaunchTime]' \
+  --output text | \
+  while read instance_id launch_time; do
+    uptime_seconds=$(date -d "$launch_time" +%s)
+    current_time=$(date +%s)
+    uptime_days=$(( (current_time - uptime_seconds) / 86400 ))
+    echo "Instance ID: $instance_id, Uptime: $uptime_days days"
+  done
 
