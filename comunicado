@@ -23,3 +23,16 @@ launch_time_seconds=$(date -d "$launch_time" +%s)
 uptime_seconds=$((current_time - launch_time_seconds))
 echo "Uptime em segundos: $uptime_seconds"
 
+#!/bin/bash
+
+INSTANCE_ID="<ID_DA_INSTANCIA>"
+
+launch_time=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[*].Instances[*].LaunchTime" --output text)
+launch_time_seconds=$(date -d "$launch_time" +%s)
+current_time_seconds=$(date +%s)
+uptime_seconds=$((current_time_seconds - launch_time_seconds))
+uptime_days=$(echo "scale=2; $uptime_seconds / 86400" | bc)
+
+echo "Uptime da instância $INSTANCE_ID: $uptime_days dias"
+
+
