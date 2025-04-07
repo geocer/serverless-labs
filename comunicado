@@ -53,5 +53,11 @@ aws cloudtrail lookup-events \
     --filters EventName=RebootInstances \
     --output table
 
+aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue="i-SUA_INSTANCIA_EC2" \
+    --query "Events[?EventName=='RebootInstances'].{EventTime: EventTime, EventName: EventName, Username: Username, EventSource: EventSource}" \
+    --output table
+
+
 
 
