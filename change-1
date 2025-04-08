@@ -1,0 +1,28 @@
+aws ec2 associate-cidr-block \
+    --vpc-id vpc-xxxxxxxxxxxxxxxxx \
+    --cidr-block 100.99.0.0/16
+
+
+# Subnet 1: 100.99.0.0/18
+aws ec2 create-subnet \
+    --vpc-id vpc-xxxxxxxxxxxxxxxxx \
+    --cidr-block 100.99.0.0/18 \
+    --availability-zone sa-east-1a
+
+# Subnet 2: 100.99.64.0/18
+aws ec2 create-subnet \
+    --vpc-id vpc-xxxxxxxxxxxxxxxxx \
+    --cidr-block 100.99.64.0/18 \
+    --availability-zone sa-east-1b
+
+# Subnet 3: 100.99.128.0/18
+aws ec2 create-subnet \
+    --vpc-id vpc-xxxxxxxxxxxxxxxxx \
+    --cidr-block 100.99.128.0/18 \
+    --availability-zone sa-east-1c
+
+# Subnet 4: 100.99.192.0/18
+aws ec2 create-subnet \
+    --vpc-id vpc-xxxxxxxxxxxxxxxxx \
+    --cidr-block 100.99.192.0/18 \
+    --availability-zone sa-east-1a # Ou outra zona de disponibilidade
