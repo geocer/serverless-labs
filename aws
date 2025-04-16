@@ -15,3 +15,8 @@ aws ec2 create-launch-template-version --launch-template-id <id_do_launch_templa
 aws ec2 modify-launch-template --launch-template-id <id_do_launch_template> --default-version <número_da_nova_versão>
 
  aws autoscaling update-auto-scaling-group --auto-scaling-group-name <nome_do_auto_scaling_group> --launch-template '{"LaunchTemplateId":"<id_do_launch_template>", "Version":"<número_da_nova_versão>"}'
+
+aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue="arn:aws:wafv2::global/webacl/teste*" \
+    --query 'Events[?EventName==`CreateWebACL`].{EventTime: EventTime, Username: Username, EventSource: EventSource, EventId: EventId}' \
+    --output table
