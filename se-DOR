@@ -1,0 +1,54 @@
+User Stories e Tasks para os Objetivos de DoD (Definition of Done):
+Aqui estão user stories e tasks detalhadas para cada um dos seus objetivos de "Definition of Done" (DoD), focando na perspectiva dos usuários (times de produto, desenvolvedores) e nas ações necessárias para atingir esses critérios de conclusão.
+Objetivo 1: DoD - Times de produtos estão empoderados para construir seus pipelines de infraestrutura
+User Story 1: Como um time de produto, eu quero ter as ferramentas e o conhecimento necessários para criar e gerenciar meus próprios pipelines de infraestrutura na AWS, para que eu possa implantar e operar meu produto de forma autônoma e eficiente.
+Tasks:
+ * [ ] Identificar e documentar as ferramentas de pipeline de infraestrutura padronizadas: O time de plataforma deve definir e documentar as ferramentas aprovadas para construção de pipelines (ex: AWS CDK, Terraform, CloudFormation).
+ * [ ] Criar tutoriais e guias práticos para as ferramentas de pipeline: Desenvolver materiais de aprendizado passo a passo, com exemplos específicos para os cenários comuns dos times de produto.
+ * [ ] Oferecer workshops e treinamentos para os times de produto: Realizar sessões interativas para capacitar os desenvolvedores dos times de produto no uso das ferramentas de pipeline.
+ * [ ] Criar templates e módulos reutilizáveis de pipeline: Desenvolver componentes de pipeline pré-configurados para tarefas comuns (ex: implantação básica de um serviço web, configuração de um banco de dados), que os times de produto possam usar e adaptar.
+ * [ ] Definir um processo de suporte e dúvidas para pipelines de infraestrutura: Estabelecer um canal claro para os times de produto buscarem ajuda e esclarecimentos sobre a construção e operação de seus pipelines.
+ * [ ] Implementar um sistema de controle de acesso (IAM) granular para os recursos de pipeline: Garantir que os times de produto tenham permissões apenas para os recursos necessários para seus pipelines, seguindo o princípio do menor privilégio.
+ * [ ] Documentar as melhores práticas e padrões para a construção de pipelines: Criar um guia de estilo e recomendações para garantir a consistência e a qualidade dos pipelines criados pelos diferentes times.
+ * [ ] Estabelecer métricas para medir o nível de autonomia dos times de produto na construção de pipelines: Definir indicadores para acompanhar quantos times estão construindo seus próprios pipelines e o quão independentes eles são.
+User Story 2: Como um desenvolvedor de produto, eu quero ter acesso fácil à documentação e exemplos de pipelines de infraestrutura, para que eu possa aprender rapidamente e implementar os pipelines necessários para o meu serviço.
+Tasks:
+ * [ ] Centralizar a documentação das ferramentas e templates de pipeline em um local de fácil acesso: Utilizar uma plataforma de conhecimento (ex: Wiki, Confluence) para organizar toda a informação relevante.
+ * [ ] Criar um catálogo de templates de pipeline com descrições claras e exemplos de uso: Facilitar a descoberta e o entendimento dos templates disponíveis.
+ * [ ] Incluir exemplos de código e configurações para diferentes cenários de implantação: Fornecer exemplos práticos que os desenvolvedores possam adaptar.
+ * [ ] Manter a documentação atualizada com as últimas versões das ferramentas e padrões: Garantir que a informação seja sempre relevante e precisa.
+ * [ ] Integrar a documentação com as ferramentas de desenvolvimento (se possível): Explorar formas de fornecer acesso à documentação diretamente no ambiente de desenvolvimento.
+Objetivo 2: DoD - Infraestrutura AWS implementada e aceita pelos desenvolvedores do sistema
+User Story 3: Como um desenvolvedor de sistema, eu quero que a infraestrutura AWS provisionada atenda aos requisitos técnicos e de desempenho do meu produto, para que eu possa implantá-lo e operá-lo de forma confiável.
+Tasks:
+ * [ ] Coletar e documentar os requisitos de infraestrutura dos times de produto: O time de plataforma deve entender as necessidades específicas de cada produto (escalabilidade, performance, segurança, etc.).
+ * [ ] Provisionar a infraestrutura AWS com base nos requisitos documentados: Utilizar as ferramentas de pipeline definidas para criar os recursos necessários na AWS (EC2, S3, RDS, etc.).
+ * [ ] Realizar testes de aceitação da infraestrutura com os desenvolvedores do sistema: Envolver os times de produto na validação de que a infraestrutura atende aos seus requisitos (testes de carga, testes de funcionalidade básica).
+ * [ ] Fornecer acesso seguro à infraestrutura provisionada para os desenvolvedores do sistema: Configurar permissões de acesso adequadas para que os desenvolvedores possam interagir com a infraestrutura para implantação e operação.
+ * [ ] Documentar a arquitetura da infraestrutura provisionada para cada produto: Criar diagramas e descrições claras da infraestrutura implantada.
+ * [ ] Estabelecer um processo de feedback para os desenvolvedores reportarem problemas ou necessidades de ajustes na infraestrutura: Criar um canal para comunicação contínua sobre a infraestrutura.
+ * [ ] Monitorar a performance e a disponibilidade da infraestrutura provisionada: Implementar ferramentas de monitoramento para garantir que a infraestrutura esteja funcionando conforme o esperado.
+User Story 4: Como um time de produto, nós queremos que a infraestrutura AWS seja fácil de usar e integrar com nossos processos de desenvolvimento e implantação, para que não haja atrito na nossa entrega de valor.
+Tasks:
+ * [ ] Integrar as ferramentas de pipeline de infraestrutura com os sistemas de CI/CD dos times de produto: Facilitar a automação da implantação de infraestrutura junto com a implantação da aplicação.
+ * [ ] Fornecer interfaces de fácil utilização para interagir com a infraestrutura (se aplicável): Considerar ferramentas de gerenciamento visual ou CLIs amigáveis.
+ * [ ] Minimizar a complexidade da infraestrutura exposta aos desenvolvedores: Abstrair detalhes desnecessários e fornecer componentes bem definidos.
+ * [ ] Oferecer suporte e treinamento contínuos sobre o uso da infraestrutura AWS: Garantir que os desenvolvedores se sintam confortáveis e confiantes em utilizar a plataforma.
+Objetivo 3: DoD - Infraestrutura AWS compliance com os standards propostos pelo time de plataforma
+User Story 5: Como um membro do time de plataforma, eu quero garantir que toda a infraestrutura AWS implementada pelos times de produto esteja em conformidade com os padrões de segurança, custos, performance e governança definidos, para manter a integridade e a eficiência da nossa plataforma AWS.
+Tasks:
+ * [ ] Definir e documentar os padrões de compliance da infraestrutura AWS: Criar políticas claras sobre segurança (IAM, redes, criptografia), custos (otimização, tagging), performance (tipos de instâncias, configurações) e governança (naming conventions, organização de recursos).
+ * [ ] Implementar ferramentas de automação para verificar a conformidade da infraestrutura: Utilizar serviços da AWS (ex: AWS Config, Security Hub, Trusted Advisor) ou ferramentas de terceiros para monitorar e auditar a conformidade.
+ * [ ] Integrar as verificações de conformidade nos pipelines de infraestrutura: Automatizar a validação da conformidade durante o processo de criação e atualização da infraestrutura.
+ * [ ] Criar alertas e notificações para identificar desvios de conformidade: Informar o time de plataforma e os times de produto sobre quaisquer não conformidades.
+ * [ ] Definir um processo de remediação para não conformidades: Estabelecer como os desvios devem ser corrigidos e quem é responsável por isso.
+ * [ ] Realizar auditorias periódicas da infraestrutura para garantir a conformidade contínua: Verificar se os padrões estão sendo seguidos e se precisam ser atualizados.
+ * [ ] Fornecer feedback e orientação aos times de produto sobre como garantir a conformidade: Ajudar os times a entenderem os padrões e a implementarem a infraestrutura de forma correta.
+ * [ ] Documentar as exceções aos padrões de conformidade e o processo para solicitá-las: Definir um mecanismo para lidar com casos em que os padrões não podem ser totalmente seguidos.
+User Story 6: Como um time de produto, nós queremos entender claramente os padrões de compliance da infraestrutura AWS e ter ferramentas que nos ajudem a implementá-los corretamente, para que nossa infraestrutura seja aprovada pelo time de plataforma.
+Tasks:
+ * [ ] Comunicar claramente os padrões de compliance aos times de produto: Utilizar a documentação centralizada e outros canais de comunicação para disseminar a informação.
+ * [ ] Fornecer templates de pipeline e módulos pré-configurados que já incorporem os padrões de compliance: Facilitar a criação de infraestrutura em conformidade por padrão.
+ * [ ] Integrar verificações de conformidade (linters, validadores) nas ferramentas de pipeline: Fornecer feedback imediato aos desenvolvedores sobre possíveis desvios de conformidade durante a construção dos pipelines.
+ * [ ] Oferecer suporte e consultoria para ajudar os times de produto a atingirem a conformidade: Disponibilizar especialistas do time de plataforma para auxiliar na implementação.
+Lembre-se que estas user stories e tasks são um ponto de partida e podem precisar ser adaptadas e refinadas de acordo com o contexto específico da sua organização e times. Priorize as tasks com base no valor e na urgência para alcançar seus objetivos de DoD de forma incremental.
