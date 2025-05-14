@@ -19,15 +19,16 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1'):
     # print(json.dumps(integrations_data, indent=2)) # Descomente para ver os dados brutos das integrações
 
     for route in routes_data:
-        integration_id = route.get('Target')
+        integration_id_from_route = route.get('Target')
         route_path = route.get('RouteKey')
         route_method = route_path.split(' ')[0] if ' ' in route_path else 'ANY'
-        print(f"\nProcessando rota: {route_method} {route_path}, Target: {integration_id}")
+        print(f"\nProcessando rota: {route_method} {route_path}, Target: {integration_id_from_route}")
+        print(f"  ID da Integração da Rota (Target): {integration_id_from_route}")
 
-        # Imprima o integration_id para verificar se ele existe
-        print(f"  ID da Integração da Rota: {integration_id}")
-
-        integration_info = next((i for i in integrations_data if i['IntegrationId'] == integration_id), None)
+        integration_info = next((
+            i for i in integrations_data
+            if i.get('IntegrationId') == integration_id_from_route
+        ), None)
 
         if integration_info:
             print(f"  Detalhes da integração encontrada: {integration_info.get('IntegrationType')}, URI: {integration_info.get('IntegrationUri')}")
@@ -39,7 +40,7 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1'):
                     lambda_config = lambda_client.get_function_configuration(FunctionName=function_name)
                     handler = lambda_config.get('Handler')
                     runtime = lambda_config.get('Runtime')
-                    retention_days = "7"
+                    retention_days = "7"  # Valor padrão, pode precisar de lógica mais complexa
 
                     integration_config = {
                         "function_name": function_name,
@@ -71,7 +72,7 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1'):
     return json.dumps(tfvars_config, indent=2)
 
 if __name__ == "__main__":
-    api_gateway_id = "your-api-gateway-id" # Substitua pelo seu ID do API Gateway v2
+    api_gateway_id = "your-api-gateway-id"  # Substitua pelo seu ID do API Gateway v2
     tfvars_content = generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1')
     print(tfvars_content)
 
