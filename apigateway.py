@@ -1,7 +1,7 @@
 import boto3
 import json
 
-def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='us-east-1'):
+def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1'):
     client = boto3.client('apigatewayv2', region_name=region_name)
     lambda_client = boto3.client('lambda', region_name=region_name)
     tfvars_config = {"api_gateway_config": []}
@@ -10,13 +10,11 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='us-east-1'):
     routes_response = client.get_routes(ApiId=api_gateway_id)
     routes_data = routes_response.get('Items', [])
     print(f"Rotas encontradas: {len(routes_data)}")
-    # print(json.dumps(routes_data, indent=2)) # Descomente para ver os dados brutos das rotas
 
     print(f"Obtendo integrações para API Gateway ID: {api_gateway_id} na região: {region_name}")
     integrations_response = client.get_integrations(ApiId=api_gateway_id)
     integrations_data = integrations_response.get('Items', [])
     print(f"Integrações encontradas: {len(integrations_data)}")
-    # print(json.dumps(integrations_data, indent=2)) # Descomente para ver os dados brutos das integrações
 
     for route in routes_data:
         integration_id = route.get('Target')
@@ -29,15 +27,16 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='us-east-1'):
         if integration_info:
             print(f"  Detalhes da integração encontrada: {integration_info.get('IntegrationType')}, URI: {integration_info.get('IntegrationUri')}")
             if integration_info['IntegrationType'] == 'AWS_PROXY' and 'arn:aws:lambda' in integration_info['IntegrationUri']:
-                lambda_arn = integration_info['IntegrationUri'].split(':function:')[0] + ':function:' + integration_info['IntegrationUri'].split(':function:')[1].split(':')[0]
+                lambda_arn = integration_info['IntegrationUri']
+                function_name = lambda_arn.split(':function:')[-1]
                 try:
-                    print(f"  Obtendo configuração da função Lambda: {lambda_arn}")
-                    lambda_config = lambda_client.get_function_configuration(FunctionName=lambda_arn)
-                    function_name = lambda_config.get('FunctionName')
+                    print(f"  Obtendo configuração da função Lambda: {function_name}")
+                    lambda_config = lambda_client.get_function_configuration(FunctionName=function_name)
                     handler = lambda_config.get('Handler')
                     runtime = lambda_config.get('Runtime')
-                    log_config = lambda_config.get('LoggingConfig')
-                    retention_days = str(log_config.get('LogGroupArn', '').split(':log-group:')[-1].split(':')[0]) if log_config else "7"
+                    # Tentativa de obter a configuração de retenção de logs (pode não ser diretamente acessível assim)
+                    # Uma abordagem mais robusta seria verificar as propriedades do grupo de logs associado à função
+                    retention_days = "7" # Valor padrão, você pode precisar implementar uma lógica mais complexa
 
                     integration_config = {
                         "function_name": function_name,
@@ -58,9 +57,9 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='us-east-1'):
                     print(f"  Configuração adicionada para: {function_name}")
 
                 except lambda_client.exceptions.ResourceNotFoundException:
-                    print(f"  Erro: Função Lambda não encontrada: {lambda_arn}")
+                    print(f"  Erro: Função Lambda não encontrada: {function_name}")
                 except Exception as e:
-                    print(f"  Erro ao obter configuração da Lambda {lambda_arn}: {e}")
+                    print(f"  Erro ao obter configuração da Lambda {function_name}: {e}")
             else:
                 print(f"  Integração não é AWS_PROXY para Lambda, ignorando.")
         else:
@@ -70,7 +69,7 @@ def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='us-east-1'):
 
 if __name__ == "__main__":
     api_gateway_id = "your-api-gateway-id" # Substitua pelo seu ID do API Gateway v2
-    tfvars_content = generate_tfvars_from_apigatewayv2(api_gateway_id)
+    tfvars_content = generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1') # Defina a região correta
     print(tfvars_content)
 
     with open("apigateway.tfvars.json", "w") as f:
