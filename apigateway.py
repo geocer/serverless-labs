@@ -1,82 +1,103 @@
 import boto3
 import json
+import re
 
-def generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1'):
-    client = boto3.client('apigatewayv2', region_name=region_name)
-    lambda_client = boto3.client('lambda', region_name=region_name)
-    tfvars_config = {"api_gateway_config": []}
+def generate_tfvars_json_from_integrations(api_id):
+    """
+    Generates a terraform.tfvars.json file for an API Gateway by inspecting
+    its integrations, matching the specified Terraform variable structure
+    partially.
 
-    print(f"Obtendo rotas para API Gateway ID: {api_gateway_id} na região: {region_name}")
-    routes_response = client.get_routes(ApiId=api_gateway_id)
-    routes_data = routes_response.get('Items', [])
-    print(f"Rotas encontradas: {len(routes_data)}")
-    # print(json.dumps(routes_data, indent=2)) # Descomente para ver os dados brutos das rotas
+    Note: This function uses get_integrations and cannot fully determine
+    route paths and methods from its output alone. The 'routes' and
+    'subroutes' lists will be generated as empty placeholders.
 
-    print(f"Obtendo integrações para API Gateway ID: {api_gateway_id} na região: {region_name}")
-    integrations_response = client.get_integrations(ApiId=api_gateway_id)
-    integrations_data = integrations_response.get('Items', [])
-    print(f"Integrações encontradas: {len(integrations_data)}")
-    # print(json.dumps(integrations_data, indent=2)) # Descomente para ver os dados brutos das integrações
+    Args:
+        api_id (str): The ID of the API Gateway.
 
-    for route in routes_data:
-        integration_id_from_route = route.get('Target')
-        route_path = route.get('RouteKey')
-        route_method = route_path.split(' ')[0] if ' ' in route_path else 'ANY'
-        print(f"\nProcessando rota: {route_method} {route_path}, Target: {integration_id_from_route}")
-        print(f"  ID da Integração da Rota (Target): {integration_id_from_route}")
+    Returns:
+        None: Creates or overwrites the terraform.tfvars.json file.
+    """
+    apigatewayv2_client = boto3.client('apigatewayv2')
+    lambda_client = boto3.client('lambda')
 
-        integration_info = next((
-            i for i in integrations_data
-            if i.get('IntegrationId') == integration_id_from_route
-        ), None)
+    # We will group configurations by the backend Lambda function
+    api_configs_by_lambda = {}
 
-        if integration_info:
-            print(f"  Detalhes da integração encontrada: {integration_info.get('IntegrationType')}, URI: {integration_info.get('IntegrationUri')}")
-            if integration_info['IntegrationType'] == 'AWS_PROXY' and 'arn:aws:lambda' in integration_info['IntegrationUri']:
-                lambda_arn = integration_info['IntegrationUri']
-                function_name = lambda_arn.split(':function:')[-1]
-                try:
-                    print(f"  Obtendo configuração da função Lambda: {function_name}")
-                    lambda_config = lambda_client.get_function_configuration(FunctionName=function_name)
-                    handler = lambda_config.get('Handler')
-                    runtime = lambda_config.get('Runtime')
-                    retention_days = "7"  # Valor padrão, pode precisar de lógica mais complexa
+    try:
+        paginator = apigatewayv2_client.get_paginator('get_integrations')
+        pages = paginator.paginate(ApiId=api_id)
 
-                    integration_config = {
-                        "function_name": function_name,
-                        "handler": handler,
-                        "runtime": runtime,
-                        "description": route.get('Description', f"Integration for {route_path}"),
-                        "cloudwatch_logs_retention_in_days": retention_days,
-                        "routes": [
-                            {
-                                "path": route_path.split(' ')[1] if ' ' in route_path else '/',
-                                "method": route_method,
-                                "subroutes": [],
-                                "parameters": route.get('RequestParameters', [])
-                            }
-                        ]
-                    }
-                    tfvars_config["api_gateway_config"].append(integration_config)
-                    print(f"  Configuração adicionada para: {function_name}")
+        for page in pages:
+            integrations = page.get('Items', [])
 
-                except lambda_client.exceptions.ResourceNotFoundException:
-                    print(f"  Erro: Função Lambda não encontrada: {function_name}")
-                except Exception as e:
-                    print(f"  Erro ao obter configuração da Lambda {function_name}: {e}")
-            else:
-                print(f"  Integração não é AWS_PROXY para Lambda, ignorando.")
-        else:
-            print(f"  Erro: Integração não encontrada para rota.")
+            for integration in integrations:
+                integration_id = integration.get('IntegrationId')
+                integration_type = integration.get('IntegrationType')
+                integration_uri = integration.get('IntegrationUri')
 
-    return json.dumps(tfvars_config, indent=2)
+                lambda_function_name = None
 
-if __name__ == "__main__":
-    api_gateway_id = "your-api-gateway-id"  # Substitua pelo seu ID do API Gateway v2
-    tfvars_content = generate_tfvars_from_apigatewayv2(api_gateway_id, region_name='sa-east-1')
-    print(tfvars_content)
+                # Try to extract Lambda function name from IntegrationUri for AWS and AWS_PROXY types
+                if integration_type in ['AWS_PROXY', 'AWS'] and integration_uri:
+                    # Example Lambda IntegrationUri format:
+                    # arn:aws:apigateway:region:lambda:path/2015-03-31/functions/arn:aws:lambda:region:account-id:function:function-name/invocations
+                    match = re.search(r'function:([^/]+)/invocations', integration_uri)
+                    if match:
+                        lambda_function_name = match.group(1)
 
-    with open("apigateway.tfvars.json", "w") as f:
-        f.write(tfvars_content)
+                if lambda_function_name:
+                    if lambda_function_name not in api_configs_by_lambda:
+                        # Fetch Lambda details if this is the first time we see this function
+                        lambda_handler = "placeholder_handler"
+                        lambda_runtime = "placeholder_runtime"
+                        lambda_description = "placeholder_description"
+                        cloudwatch_logs_retention_in_days = 30 # Placeholder
 
-    print("Arquivo 'apigateway.tfvars.json' gerado com sucesso.")
+                        try:
+                            lambda_response = lambda_client.get_function(FunctionName=lambda_function_name)
+                            lambda_config = lambda_response.get('Configuration', {})
+                            lambda_handler = lambda_config.get('Handler', lambda_handler)
+                            lambda_runtime = lambda_config.get('Runtime', lambda_runtime)
+                            lambda_description = lambda_config.get('Description', lambda_description)
+                            # cloudwatch_logs_retention_in_days is not directly available here
+                        except Exception as e:
+                            print(f"Warning: Could not get details for Lambda function {lambda_function_name}: {e}")
+                            # If Lambda details cannot be fetched, use placeholders
+
+                        # Initialize the structure for this Lambda backend
+                        api_configs_by_lambda[lambda_function_name] = {
+                            "function_name": lambda_function_name,
+                            "handler": lambda_handler,
+                            "runtime": lambda_runtime,
+                            "description": lambda_description,
+                            "cloudwatch_logs_retention_in_days": cloudwatch_logs_retention_in_days,
+                            "routes": [] # Placeholder: Cannot determine routes from get_integrations
+                        }
+                    # Note: We are not adding routes here because get_integrations doesn't provide route info.
+                    # If you had a way to map integration IDs to routes, you would add that logic here.
+
+        # Convert the dictionary of configs into the list format expected by tfvars
+        api_gateway_config_list = list(api_configs_by_lambda.values())
+
+        # Final structure for the tfvars.json file
+        tfvars_data = {
+            "api_gateway_config": api_gateway_config_list
+        }
+
+        # Write to terraform.tfvars.json
+        with open("terraform.tfvars.json", "w") as f:
+            json.dump(tfvars_data, f, indent=2)
+
+        print("Successfully generated terraform.tfvars.json. Note: 'routes' and 'subroutes' are placeholders.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+# --- How to use the script ---
+# Replace 'YOUR_API_GATEWAY_ID' with the actual ID of your API Gateway
+# You can find the API ID in the AWS Management Console or by using list_apis()
+api_id_to_process = 'YOUR_API_GATEWAY_ID'
+
+# Run the function
+generate_tfvars_json_from_integrations(api_id_to_process)
