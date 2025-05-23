@@ -1,0 +1,215 @@
+Terraform Project - Infrastructure Authorizer
+You are tasked with implementing a Terraform infrastructure that deploys an application authorizing transactions for a specific account, following a set of predefined rules.
+
+Please read the instructions below, and feel free to ask for clarifications if needed.
+
+Packaging
+Your README.md file should contain a description of relevant Terraform design choices, along with instructions on how to build and apply your infrastructure.
+
+Building and applying the infrastructure must be possible under Unix or Mac operating systems. Dockerized builds are welcome.
+
+You may use open source Terraform providers and modules you find suitable, but please refrain as much as possible from adding unnecessary complexity.
+
+Your Terraform project should manage infrastructure in a streamlined and organized manner, reflecting best practices for maintainability and extensibility.
+
+Sample Usage
+Bash
+
+# Example of applying the infrastructure
+$ terraform init
+$ terraform plan -var-file="dev.tfvars.json"
+$ terraform apply -var-file="dev.tfvars.json"
+State
+The program should not rely on any external database for application state.
+
+Internal state should be handled by an explicit in-memory structure (for the application logic, as per original challenge). For Terraform, remote state management should be configured appropriately (e.g., S3, Azure Blob Storage, etc., though not explicitly requested in the Terraform requirements, it's a best practice).
+
+State is to be reset at application start (for the application). For Terraform, terraform destroy will remove the infrastructure, effectively resetting the deployed state.
+
+Operations
+The Terraform project handles the provisioning of infrastructure for different parts of the application:
+
+Backend Infrastructure Provisioning
+Frontend Infrastructure Provisioning
+For the sake of simplicity, assume resource naming conventions and basic networking are handled within the respective backend and frontend modules.
+
+1. Backend Infrastructure Provisioning
+Input
+
+Provisions the necessary infrastructure for the backend services, such as compute, database, and message queues.
+
+Output
+
+The provisioned backend infrastructure's current state.
+
+Business Logic Requirements (Terraform)
+
+Once defined, the backend infrastructure should adhere to the following:
+
+Submodules should consume the main module from a Git source. This ensures version control and reusability of common configurations.
+A JSON file must be used as tfvars for input variables. This file will declare variables to map lists or dictionaries of data, allowing for structured input.
+All for loop handling must be done through locals. This promotes cleaner and more readable Terraform code by pre-processing complex data structures.
+Terraform files must be described and separated into backend and frontend directories/modules. This provides clear separation of concerns and organization.
+2. Frontend Infrastructure Provisioning
+Input
+
+Provisions the necessary infrastructure for the frontend services, such as static site hosting, CDN, and API Gateway.
+
+Output
+
+The provisioned frontend infrastructure's current state.
+
+Business Logic Requirements (Terraform)
+
+Similar to the backend, the frontend infrastructure provisioning must also adhere to the following:
+
+Submodules should consume the main module from a Git source.
+A JSON file must be used as tfvars for input variables.
+All for loop handling must be done through locals.
+Terraform files must be described and separated into backend and frontend directories/modules.
+Error Handling (Terraform)
+Please assume input parsing errors for .tfvars will be handled by Terraform's validation. We will not evaluate your submission against tfvars that breaks the contract.
+
+Violations of the defined Terraform business rules (e.g., for loops not in locals, modules not consumed from Git) are considered design flaws and should be identified during code review or automated testing.
+
+That means the terraform plan and apply execution should ideally complete successfully, with the structural and design requirements validated through testing.
+
+Our Expectations (Terraform)
+We at Cloud FTS LATAM value simple, elegant, and working code. This exercise should reflect your understanding of it in the context of Infrastructure as Code. Your solution is expected to be production quality, maintainable, and extensible. Hence, we will look for:
+
+Quality unit and integration tests (using tools like Terratest or terraform validate).
+Documentation where needed (e.g., in README.md files within modules).
+Instructions to run the code.
+General Notes (Terraform)
+This challenge may be extended by you and a Cloud FTS LATAM engineer on a different step of the process.
+
+You should submit your solution source code to us as a compressed file containing the code and possible documentation.
+
+Please make sure not to include unnecessary files such as .terraform directories, .tfstate files, or .terraform.lock.hcl.
+
+Do not upload your solution to public repositories in GitHub, BitBucket, etc.
+
+Please keep your test anonymous, paying attention to:
+
+the code itself, including tests and namespaces;
+version control author information;
+automatic comments your development environment may add.
+Test-Driven Development (TDD) for Terraform
+For validating the Terraform requirements, we can use a combination of static analysis, structural checks, and potentially integration tests. Since the requirements are largely about code structure and how variables are handled, tools like terraform validate and tflint (with custom rules if necessary), along with grep or similar command-line tools for structural checks, will be beneficial. For more robust integration testing, Terratest (Go-based) is an excellent choice.
+
+Here's a TDD approach:
+
+1. Define Tests (Before Writing Terraform Code)
+Before writing any .tf files, define the tests that will fail initially and pass once the requirements are met.
+
+Requirement 1: Submodules must consume the main module from a Git source.
+Test Idea: Check if module sources are Git URLs.
+TDD Test (Pseudocode/Concept):
+# Test 1.1: Check backend module source
+# Expected Failure: Module not yet defined or source is local path
+# Expected Success: module "backend" { source = "git::https://github.com/your-org/terraform-modules.git//backend?ref=v1.0.0" }
+RUN grep -E 'module\s+"backend"\s+{\s+source\s*=\s*"git::https:\/\/' main.tf
+ASSERT exit_code == 0
+
+# Test 1.2: Check frontend module source
+# Expected Failure: Module not yet defined or source is local path
+# Expected Success: module "frontend" { source = "git::https://github.com/your-org/terraform-modules.git//frontend?ref=v1.0.0" }
+RUN grep -E 'module\s+"frontend"\s+{\s+source\s*=\s*"git::https:\/\/' main.tf
+ASSERT exit_code == 0
+Tooling: grep within a shell script or a custom tflint rule. For Terratest, you could parse terraform plan output or the .terraform/modules directory.
+Requirement 2: A JSON file must be used as tfvars for input variables.
+Test Idea: Verify the presence of a tfvars.json file and that terraform plan can consume it.
+TDD Test (Pseudocode/Concept):
+# Test 2.1: Check for presence of .tfvars.json file
+# Expected Failure: File not created
+# Expected Success: File exists
+RUN test -f "dev.tfvars.json"
+ASSERT exit_code == 0
+
+# Test 2.2: Validate terraform plan with the tfvars.json
+# Expected Failure: Syntax error in tfvars.json or no variables declared/mapped
+# Expected Success: Plan runs without errors. This primarily checks parsing.
+RUN terraform plan -var-file="dev.tfvars.json" -no-color
+ASSERT exit_code == 0
+Tooling: Shell commands, terraform validate, terraform plan.
+Requirement 3: All for loop handling must be done through locals.
+Test Idea: Scan for for loops directly within resource blocks or variable defaults, ensuring they are encapsulated in locals.
+TDD Test (Pseudocode/Concept):
+# Test 3.1: No direct 'for_each' or 'for' loops in resource blocks outside of 'for_each' on a local.
+# This is a bit more complex to automate perfectly without custom parsing.
+# Ideal: Check if any `for` expression within a resource block isn't referencing a local variable.
+# Pragmatic: Look for patterns that *suggest* direct loop usage.
+# Expected Failure: find `for_each` or `for` loop directly applied to a resource attribute without locals.
+# Expected Success: `for_each` and `for` loops are contained within `locals` blocks.
+RUN grep -E 'resource\s+".*?"\s+".*?"\s*{[^}]*for(_each)?\s*=' *.tf | grep -v 'locals\.'
+ASSERT exit_code == 1 # Expecting no matches (grep returns 1 if no matches)
+
+# Test 3.2: Check that 'locals' block exists and contains expressions for lists/maps.
+# Expected Failure: No 'locals' block or empty 'locals' block.
+# Expected Success: `locals` block with defined complex structures.
+RUN grep -E 'locals\s*{.*}' *.tf
+ASSERT exit_code == 0
+Tooling: grep (potentially with more sophisticated regex), tflint with custom plugins, or parsing Terraform HCL with a Go program (Terratest).
+Requirement 4: Terraform files must be described and separated into backend and frontend.
+Test Idea: Verify the directory structure and the presence of Terraform files within those directories.
+TDD Test (Pseudocode/Concept):
+# Test 4.1: Check for backend directory presence
+# Expected Failure: Directory not created
+# Expected Success: Directory exists
+RUN test -d "modules/backend"
+ASSERT exit_code == 0
+
+# Test 4.2: Check for frontend directory presence
+# Expected Failure: Directory not created
+# Expected Success: Directory exists
+RUN test -d "modules/frontend"
+ASSERT exit_code == 0
+
+# Test 4.3: Check for .tf files within backend
+# Expected Failure: No .tf files in backend
+# Expected Success: At least one .tf file in backend
+RUN find modules/backend -name "*.tf" | grep -q .
+ASSERT exit_code == 0
+
+# Test 4.4: Check for .tf files within frontend
+# Expected Failure: No .tf files in frontend
+# Expected Success: At least one .tf file in frontend
+RUN find modules/frontend -name "*.tf" | grep -q .
+ASSERT exit_code == 0
+Tooling: Shell commands (test -d, find).
+2. Run Tests (Expect Failures)
+Execute these tests. They should all fail initially because no Terraform code has been written to satisfy them.
+
+3. Write Minimum Terraform Code to Pass One Test
+Implement the smallest amount of Terraform code to make one of the failing tests pass. For example, create the modules/backend directory and an empty main.tf inside it to pass Test 4.1 and Test 4.3.
+
+4. Run Tests Again
+Verify that the specific test you targeted now passes, and others still fail.
+
+5. Refactor (If Necessary)
+Review the code for clarity and efficiency. At this stage, it might be minimal, so refactoring opportunities might be limited.
+
+6. Repeat
+Continue this cycle, picking the next failing test, writing just enough code to make it pass, and then refactoring.
+
+Example TDD Flow for "Submodules must consume from Git":
+
+Tests (Fail): grep -E 'module\s+"backend"\s+{\s+source\s*=\s*"git::https:\/\/' main.tf fails.
+Code: Create main.tf with:
+Terraform
+
+module "backend" {
+  source = "./modules/backend" # Initial, incorrect source
+  # ...
+}
+Tests (Fail): The grep test still fails because the source is not a Git URL.
+Code: Update main.tf:
+Terraform
+
+module "backend" {
+  source = "git::https://github.com/your-org/terraform-modules.git//backend?ref=v1.0.0"
+  # ...
+}
+Tests (Pass): The grep test now passes.
+Refactor: (Not applicable yet, but imagine if the Git URL was hardcoded in multiple places, you'd refactor it into a local variable).
+By following this iterative process, you ensure that each requirement is addressed and validated through automated tests, leading to a more robust and maintainable Terraform codebase.
