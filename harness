@@ -1,0 +1,140 @@
+# pipeline.yml
+pipeline:
+  name: AWS Network Setup with Python Script
+  identifier: AWS_Network_Setup_Python_Script
+  projectIdentifier: seu_projeto_harness # Substitua pelo ID do seu projeto Harness
+  orgIdentifier: sua_organizacao_harness # Substitua pelo ID da sua organização Harness
+
+  # Definir inputs que podem ser passados em tempo de execução
+  inputSets:
+    - name: default
+      fields:
+        - .variables.awsVpcId
+        - .variables.awsSecurityGroupIds
+        - .variables.numSubnets
+        - .variables.subnetTagName
+        - .variables.targetVpcCidr
+        - .variables.awsRegion
+
+  variables:
+    - name: awsVpcId
+      type: String
+      description: "ID da VPC AWS onde os recursos serão criados."
+      required: true
+      value: "<+input>" # Permite input em tempo de execução
+    - name: awsSecurityGroupIds
+      type: String
+      description: "Lista de IDs de Security Groups separados por espaço para os VPC Endpoints."
+      required: true
+      value: "<+input>" # Ex: "sg-0123456789abcdef0 sg-fedcba9876543210"
+    - name: numSubnets
+      type: Number
+      description: "Número de subnets desejadas (mínimo 2 para AZs diferentes)."
+      required: true
+      value: 2 # Valor padrão
+    - name: subnetTagName
+      type: String
+      description: "Nome da tag para as subnets criadas."
+      required: true
+      value: "Harness-Managed-Subnet"
+    - name: targetVpcCidr
+      type: String
+      description: "Prefixo CIDR da VPC para identificar os blocos (e.g., 100.99.0.0/16)."
+      required: true
+      value: "100.99.0.0/16"
+    - name: awsRegion
+      type: String
+      description: "Região AWS a ser usada (e.g., sa-east-1)."
+      required: true
+      value: "sa-east-1"
+
+  stages:
+    - stage:
+        name: Setup AWS Network
+        identifier: Setup_AWS_Network
+        description: "Executa o script Python para configurar a rede AWS."
+        type: Custom
+        spec:
+          # Define o ambiente de execução. Docker é recomendado para scripts.
+          # Você pode usar uma imagem com Python e Boto3 já instalados,
+          # ou instalar Boto3 no step.
+          containerPort: 8080 # Porta dummy, não realmente usada para este script
+          image: "python:3.9-slim-buster" # Imagem Docker com Python
+          # serviceAccountName: "your-kubernetes-service-account" # Se estiver usando Kubernetes Delegate
+          # hostPath: "/var/run/docker.sock" # Se estiver usando Docker-in-Docker para acesso ao Docker
+          # accessMode: "auto" # Para Docker ou Kubernetes Delegates
+
+          execution:
+            steps:
+              - step:
+                  name: Checkout Python Script
+                  identifier: Checkout_Python_Script
+                  type: GitClone
+                  spec:
+                    connectorRef: my_gitlab_connector # Substitua pelo nome do seu conector GitLab
+                    repoName: your-repo-name # Substitua pelo nome do seu repositório (ex: aws-automation-scripts)
+                    # filePath: "path/to/your/aws_network_setup.py" # Opcional: Caminho específico se o script não estiver na raiz
+                    depth: 1
+                    build:
+                      type: Branch
+                      spec:
+                        branch: main # Substitua pela sua branch padrão (e.g., main, master, develop)
+                  timeout: 10m
+
+              - step:
+                  name: Install Python Dependencies
+                  identifier: Install_Python_Dependencies
+                  type: Run
+                  spec:
+                    connectorRef: none # Não é necessário conector para este step, roda no delegate
+                    command: |
+                      pip install boto3
+                  timeout: 5m
+
+              - step:
+                  name: Run AWS Network Setup Script
+                  identifier: Run_AWS_Network_Setup_Script
+                  type: Run
+                  spec:
+                    connectorRef: none # Não é necessário conector para este step, roda no delegate
+                    # Credenciais AWS injetadas como variáveis de ambiente
+                    # Estes segredos devem ser configurados no seu Harness Secret Manager
+                    envVariables:
+                      AWS_ACCESS_KEY_ID: <+secrets.get("aws_access_key_id")>
+                      AWS_SECRET_ACCESS_KEY: <+secrets.get("aws_secret_access_key")>
+                      # Se estiver usando uma AWS IAM Role com credenciais temporárias, inclua:
+                      # AWS_SESSION_TOKEN: <+secrets.get("aws_session_token")>
+                      AWS_REGION: <+pipeline.variables.awsRegion> # Injeta a região do pipeline
+
+                    command: |
+                      # Navegue até o diretório onde o script foi feito o checkout
+                      # Assumimos que o script está na raiz do repositório (ou filePath configurado no GitClone)
+                      # O Harness clona o repositório em um diretório com o nome do repositório
+                      # Ex: se repoName for 'aws-automation-scripts', o script estará em ./aws-automation-scripts/aws_network_setup.py
+                      REPO_DIR="your-repo-name" # Substitua pelo nome do seu repositório
+                      SCRIPT_PATH="${REPO_DIR}/aws_network_setup.py"
+
+                      # Executa o script Python com os argumentos passados
+                      python ${SCRIPT_PATH} \
+                      --vpc-id <+pipeline.variables.awsVpcId> \
+                      --security-group-ids <+pipeline.variables.awsSecurityGroupIds> \
+                      --num-subnets <+pipeline.variables.numSubnets> \
+                      --subnet-tag-name "<+pipeline.variables.subnetTagName>" \
+                      --target-vpc-cidr "<+pipeline.variables.targetVpcCidr>" \
+                      --region "<+pipeline.variables.awsRegion>"
+                  timeout: 20m # Ajuste o timeout conforme a complexidade da criação dos recursos
+        
+        # Opcional: Adicionar um Rollback Step (ex: para deletar recursos em caso de falha)
+        # rollbackSteps:
+        #   - step:
+        #       name: Cleanup AWS Resources (Rollback)
+        #       identifier: Cleanup_AWS_Resources
+        #       type: Run
+        #       spec:
+        #         connectorRef: none
+        #         command: |
+        #           echo "Running cleanup script (e.g., delete resources created by the main script)"
+        #           # Aqui você chamaria outro script Python ou comandos AWS CLI para limpeza
+        #           # python ${REPO_DIR}/cleanup_script.py --vpc-id <+pipeline.variables.awsVpcId> ...
+        #       timeout: 10m
+
