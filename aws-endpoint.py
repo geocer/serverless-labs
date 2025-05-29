@@ -245,7 +245,6 @@ def get_subnet_for_nat_gateway(vpc_id, main_vpc_cidr, region,
     
     try:
         # Filtra subnets que estão dentro do main_vpc_cidr
-        # Usamos uma estratégia de iteração pois o filtro 'cidr-block' com '*' pode não ser preciso o suficiente
         all_subnets_in_vpc = ec2_client.describe_subnets(
             Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
         )['Subnets']
@@ -275,7 +274,6 @@ def get_subnet_for_nat_gateway(vpc_id, main_vpc_cidr, region,
     except Exception as e:
         logging.error(f"Erro ao encontrar subnet para NAT Gateway: {e}")
         return None
-
 
 def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, tag_name_prefix, region,
                    aws_access_key_id, aws_secret_access_key, aws_session_token):
@@ -319,6 +317,7 @@ def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, t
 
     # Mapeamento de AZ para sufixo (a, b) para nomes de tags
     az_suffixes = {'sa-east-1a': 'a', 'sa-east-1b': 'b'}
+    tag_types = ['app', 'database']
 
     try:
         # Calcular os blocos CIDR para as novas subnets
@@ -328,58 +327,67 @@ def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, t
         if len(subnets_to_create_cidrs) < num_subnets:
             logging.error(f"O CIDR base '{base_cidr_block}' (/{(network.prefixlen)}) não pode ser dividido em {num_subnets} subnets de prefixo /{subnet_prefix_length}. São possíveis apenas {len(subnets_to_create_cidrs)}.")
             return []
+        
+        # Contador para os CIDRs e para o número de subnets criadas
+        cidr_idx = 0
+        created_count = 0
 
-        for i in range(num_subnets):
-            if i >= len(subnets_to_create_cidrs):
-                logging.warning(f"Não há mais CIDRs disponíveis para criar a subnet {i+1}. Criadas {len(created_subnet_ids)} subnets.")
+        # Loop para criar as subnets, garantindo a alternância de AZ e tipo
+        while created_count < num_subnets and cidr_idx < len(subnets_to_create_cidrs):
+            for az_name in available_azs:
+                if created_count >= num_subnets or cidr_idx >= len(subnets_to_create_cidrs):
+                    break # Sair se já criamos o número desejado de subnets ou esgotamos os CIDRs
+                
+                for tag_type in tag_types:
+                    if created_count >= num_subnets or cidr_idx >= len(subnets_to_create_cidrs):
+                        break # Sair se já criamos o número desejado de subnets ou esgotamos os CIDRs
+                    
+                    subnet_cidr = str(subnets_to_create_cidrs[cidr_idx])
+                    final_tag_name = f"{tag_name_prefix}-{tag_type}-non-routable-{az_suffixes.get(az_name, az_name.split('-')[-1])}"
+
+                    # Verificar se já existe uma subnet com este CIDR e AZ na VPC
+                    existing_subnets = ec2_client.describe_subnets(
+                        Filters=[
+                            {'Name': 'vpc-id', 'Values': [vpc_id]},
+                            {'Name': 'cidr-block', 'Values': [subnet_cidr]},
+                            {'Name': 'availability-zone', 'Values': [az_name]} 
+                        ]
+                    )['Subnets']
+
+                    if existing_subnets:
+                        subnet_id = existing_subnets[0]['SubnetId']
+                        logging.info(f"Subnet com CIDR '{subnet_cidr}' e AZ '{az_name}' (Tag: {final_tag_name}) já existe na VPC '{vpc_id}' como '{subnet_id}'. Reutilizando.")
+                        created_subnet_ids.append(subnet_id)
+                    else:
+                        logging.info(f"Tentando criar subnet com CIDR '{subnet_cidr}' na AZ '{az_name}' com tag: {final_tag_name}")
+                        try:
+                            subnet = ec2_client.create_subnet(
+                                VpcId=vpc_id,
+                                CidrBlock=subnet_cidr,
+                                AvailabilityZone=az_name,
+                                TagSpecifications=[
+                                    {
+                                        'ResourceType': 'subnet',
+                                        'Tags': [
+                                            {'Key': 'Name', 'Value': final_tag_name},
+                                            {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
+                                        ]
+                                    },
+                                ]
+                            )
+                            subnet_id = subnet['Subnet']['SubnetId']
+                            created_subnet_ids.append(subnet_id)
+                            logging.info(f"Subnet '{subnet_id}' com CIDR '{subnet_cidr}' criada na AZ '{az_name}'.")
+                        except Exception as e:
+                            logging.error(f"Erro ao criar subnet '{subnet_cidr}' na AZ '{az_name}': {e}")
+                    
+                    created_count += 1
+                    cidr_idx += 1
+                    if created_count >= num_subnets: # Se atingiu o número desejado de subnets, sair
+                        break
+            if created_count >= num_subnets: # Se atingiu o número desejado de subnets, sair do loop externo
                 break
 
-            az_index = i % len(available_azs) # Cicla entre as AZs disponíveis e permitidas
-            az_name = available_azs[az_index]
-            
-            subnet_cidr = str(subnets_to_create_cidrs[i])
-            
-            # Definir o nome da tag com base no requisito
-            # Alterna entre 'app' e 'database' para os nomes
-            tag_name_suffix = 'app' if i % 2 == 0 else 'database'
-            final_tag_name = f"{tag_name_prefix}-{tag_name_suffix}-non-routable-{az_suffixes.get(az_name, az_name.split('-')[-1])}"
-
-
-            # Verificar se já existe uma subnet com este CIDR e AZ na VPC
-            existing_subnets = ec2_client.describe_subnets(
-                Filters=[
-                    {'Name': 'vpc-id', 'Values': [vpc_id]},
-                    {'Name': 'cidr-block', 'Values': [subnet_cidr]},
-                    {'Name': 'availability-zone', 'Values': [az_name]} 
-                ]
-            )['Subnets']
-
-            if existing_subnets:
-                subnet_id = existing_subnets[0]['SubnetId']
-                logging.info(f"Subnet com CIDR '{subnet_cidr}' e AZ '{az_name}' já existe na VPC '{vpc_id}' como '{subnet_id}'. Reutilizando.")
-                created_subnet_ids.append(subnet_id)
-            else:
-                logging.info(f"Tentando criar subnet com CIDR '{subnet_cidr}' na AZ '{az_name}' com tag: {final_tag_name}")
-                try:
-                    subnet = ec2_client.create_subnet(
-                        VpcId=vpc_id,
-                        CidrBlock=subnet_cidr,
-                        AvailabilityZone=az_name,
-                        TagSpecifications=[
-                            {
-                                'ResourceType': 'subnet',
-                                'Tags': [
-                                    {'Key': 'Name', 'Value': final_tag_name},
-                                    {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
-                                ]
-                            },
-                        ]
-                    )
-                    subnet_id = subnet['Subnet']['SubnetId']
-                    created_subnet_ids.append(subnet_id)
-                    logging.info(f"Subnet '{subnet_id}' com CIDR '{subnet_cidr}' criada na AZ '{az_name}'.")
-                except Exception as e:
-                    logging.error(f"Erro ao criar subnet '{subnet_cidr}' na AZ '{az_name}': {e}")
     except Exception as e:
         logging.error(f"Erro geral ao criar subnets: {e}")
 
@@ -493,7 +501,7 @@ def main():
     parser.add_argument('--subnet-prefix-length', type=int, default=20, help='Comprimento do prefixo das novas subnets do 100.99.0.0/16 (e.g., 20 para /20).')
     parser.add_argument('--new-subnet-tag-name-prefix', type=str, default='Harness', help='Prefixo do Tag Name para as novas subnets criadas (do 100.99.0.0/16). As tags finais serão 'Harness-app-non-routable-[AZ]' ou 'Harness-database-non-routable-[AZ]').')
     parser.add_argument('--non-routable-cidr', type=str, default='100.99.0.0/16', help='CIDR a ser dividido em novas subnets (este será o CIDR "não roteável" via TGW).')
-    parser.add_argument('--main-vpc-cidr', type=str, required=True, help='CIDR principal da VPC onde o NAT Gateway deve ser criado e onde as subnets roteáveis existentes estão.') # NOVO ARGUMENTO
+    parser.add_argument('--main-vpc-cidr', type=str, required=True, help='CIDR principal da VPC onde o NAT Gateway deve ser criado e onde as subnets roteáveis existentes estão.')
 
     args = parser.parse_args()
 
@@ -613,3 +621,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
