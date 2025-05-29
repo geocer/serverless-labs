@@ -1,0 +1,42 @@
+# .gitlab-ci.yml
+
+default:
+  image: python:3.9-slim-buster # Imagem Docker base para executar o script Python
+
+variables:
+  AWS_REGION: sa-east-1 # Região AWS padrão
+  VPC_ID: your-vpc-id # Substitua pelo ID da sua VPC (pode ser uma variável CI/CD)
+  SECURITY_GROUP_IDS: "sg-xxxxxxxxxxxxxxxxx sg-yyyyyyyyyyyyyyyyy" # Substitua pelos IDs dos seus Security Groups (separados por espaço)
+  NUM_SUBNETS: "4" # Número de subnets a serem criadas
+  SUBNET_PREFIX_LENGTH: "20" # Comprimento do prefixo das novas subnets
+  NEW_SUBNET_TAG_NAME_PREFIX: "Harness" # Prefixo para o nome das tags das novas subnets
+  NON_ROUTABLE_CIDR: "100.99.0.0/16" # CIDR para as novas subnets não roteáveis
+  MAIN_VPC_CIDR: "10.0.0.0/16" # CIDR principal da sua VPC (substitua pelo seu CIDR principal)
+
+stages:
+  - deploy-network
+
+deploy_aws_network:
+  stage: deploy-network
+  script:
+    - echo "Iniciando a configuração da rede AWS..."
+    - pip install boto3 # Instala a biblioteca boto3
+    # O script Python estará no diretório raiz do repositório GitLab
+    - python your_network_setup_script.py \
+      --region $AWS_REGION \
+      --vpc-id $VPC_ID \
+      --security-group-ids $SECURITY_GROUP_IDS \
+      --num-subnets $NUM_SUBNETS \
+      --subnet-prefix-length $SUBNET_PREFIX_LENGTH \
+      --new-subnet-tag-name-prefix $NEW_SUBNET_TAG_NAME_PREFIX \
+      --non-routable-cidr $NON_ROUTABLE_CIDR \
+      --main-vpc-cidr $MAIN_VPC_CIDR
+    - echo "Configuração da rede AWS concluída."
+  # As variáveis AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY (e SESSION_TOKEN)
+  # são automaticamente injetadas no ambiente do runner pelo GitLab CI/CD se configuradas.
+  # tags:
+  #   - your-aws-runner-tag # Opcional: use tags se você tiver runners específicos para AWS
+  only:
+    - main # Este job será executado apenas quando houver um push ou merge request na branch 'main'
+  when: manual # Define como manual para evitar execução automática em cada push
+  allow_failure: false # Não permite que o job falhe
