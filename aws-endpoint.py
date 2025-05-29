@@ -2,10 +2,25 @@ import boto3
 import argparse
 import logging
 import os
-import ipaddress # Importar para manipulação de CIDR
+import ipaddress
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Lista de serviços de endpoint a serem criados (excluindo S3 que é Gateway Endpoint)
+service_endpoints_to_create = [
+    'com.amazonaws.sa-east-1.ssm',
+    'com.amazonaws.sa-east-1.ssmmessages',
+    'com.amazonaws.sa-east-1.ec2messages',
+    'com.amazonaws.sa-east-1.logs',
+    'com.amazonaws.sa-east-1.ecr.api',
+    'com.amazonaws.sa-east-1.sts',
+    'com.amazonaws.sa-east-1.elasticloadbalancing',
+    'com.amazonaws.sa-east-1.autoscaling',
+    'com.amazonaws.sa-east-1.ec2',
+    'com.amazonaws.sa-east-1.ecr.dkr',
+    'com.amazonaws.sa-east-1.ec2instanceconnect'
+]
 
 def get_aws_client(service_name, region_name='sa-east-1',
                    aws_access_key_id=None, aws_secret_access_key=None, aws_session_token=None):
@@ -67,27 +82,48 @@ def create_vpc_endpoints(service_names, vpc_id, subnet_ids, security_group_ids, 
     created_endpoints = []
     for service_name in service_names:
         try:
-            logging.info(f"Criando VPC Endpoint para o serviço: {service_name}")
-            response = ec2_client.create_vpc_endpoint(
-                VpcId=vpc_id,
-                ServicePrivateDnsName=service_name,
-                VpcEndpointType='Interface',
-                SubnetIds=subnet_ids,
-                SecurityGroupIds=security_group_ids,
-                PrivateDnsEnabled=True,
-                TagSpecifications=[
-                    {
-                        'ResourceType': 'vpc-endpoint',
-                        'Tags': [
-                            {'Key': 'Name', 'Value': f"{service_name.split('.')[-2]}-endpoint"},
-                            {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
-                        ]
-                    },
-                ]
-            )
-            endpoint_id = response['VpcEndpoint']['VpcEndpointId']
-            created_endpoints.append(endpoint_id)
-            logging.info(f"VPC Endpoint '{endpoint_id}' para '{service_name}' criado com sucesso.")
+            if service_name.endswith('.s3'): # S3 é um Gateway Endpoint
+                logging.info(f"Criando VPC Gateway Endpoint para o serviço: {service_name}")
+                response = ec2_client.create_vpc_endpoint(
+                    VpcId=vpc_id,
+                    ServiceName=f'com.amazonaws.{region}.s3', # Nome de serviço para S3 Gateway Endpoint
+                    VpcEndpointType='Gateway',
+                    RouteTableIds=[], # Gateway Endpoints associam-se a Route Tables, não a Subnets
+                    TagSpecifications=[
+                        {
+                            'ResourceType': 'vpc-endpoint',
+                            'Tags': [
+                                {'Key': 'Name', 'Value': f"{service_name.split('.')[-1]}-gateway-endpoint"},
+                                {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
+                            ]
+                        },
+                    ]
+                )
+                endpoint_id = response['VpcEndpoint']['VpcEndpointId']
+                created_endpoints.append(endpoint_id)
+                logging.info(f"VPC Gateway Endpoint '{endpoint_id}' para '{service_name}' criado com sucesso.")
+            else: # Interface Endpoints
+                logging.info(f"Criando VPC Interface Endpoint para o serviço: {service_name}")
+                response = ec2_client.create_vpc_endpoint(
+                    VpcId=vpc_id,
+                    ServiceName=service_name,
+                    VpcEndpointType='Interface',
+                    SubnetIds=subnet_ids,
+                    SecurityGroupIds=security_group_ids,
+                    PrivateDnsEnabled=True,
+                    TagSpecifications=[
+                        {
+                            'ResourceType': 'vpc-endpoint',
+                            'Tags': [
+                                {'Key': 'Name', 'Value': f"{service_name.split('.')[-2]}-endpoint"},
+                                {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
+                            ]
+                        },
+                    ]
+                )
+                endpoint_id = response['VpcEndpoint']['VpcEndpointId']
+                created_endpoints.append(endpoint_id)
+                logging.info(f"VPC Endpoint '{endpoint_id}' para '{service_name}' criado com sucesso.")
         except Exception as e:
             logging.error(f"Erro ao criar VPC Endpoint para '{service_name}': {e}")
     return created_endpoints
@@ -131,7 +167,7 @@ def associate_subnets_to_route_table(route_table_id, subnet_ids, region,
     successful_associations = []
     for subnet_id in subnet_ids:
         try:
-            # Verifica se a subnet já está associada a esta tabela de roteamento
+            # Verifica se a subnet já está explicitamente associada a esta tabela de roteamento
             current_associations = ec2_client.describe_route_tables(
                 Filters=[
                     {'Name': 'association.subnet-id', 'Values': [subnet_id]},
@@ -139,27 +175,16 @@ def associate_subnets_to_route_table(route_table_id, subnet_ids, region,
                 ]
             )['RouteTables']
 
-            already_associated = False
-            if current_associations:
-                for current_rt in current_associations:
-                    for assoc in current_rt.get('Associations', []):
-                        # Verifica se a associação explícita existe
-                        if assoc.get('SubnetId') == subnet_id and assoc.get('RouteTableId') == route_table_id and assoc.get('Main', False) is False:
-                            logging.info(f"Subnet '{subnet_id}' já está explicitamente associada à tabela de roteamento '{route_table_id}'.")
-                            already_associated = True
-                            break
-                        # Se for uma associação principal, a subnet já está associada à RT principal da VPC
-                        elif assoc.get('SubnetId') == subnet_id and assoc.get('Main', False) is True:
-                             logging.info(f"Subnet '{subnet_id}' está associada à tabela de roteamento principal da VPC.")
-                             # Precisamos desassociar da principal se for associar a uma nova RT não principal.
-                             # No contexto deste script, se estamos associando explicitamente a uma RT do TGW,
-                             # a associação principal não impede a associação explícita.
-                             # Não precisamos desassociar da principal para associar a uma RT explícita.
-
-                    if already_associated:
+            already_explicitly_associated = False
+            for rt in current_associations:
+                for assoc in rt.get('Associations', []):
+                    if assoc.get('SubnetId') == subnet_id and assoc.get('RouteTableId') == route_table_id and not assoc.get('Main', False):
+                        already_explicitly_associated = True
                         break
+                if already_explicitly_associated:
+                    break
 
-            if not already_associated:
+            if not already_explicitly_associated:
                 logging.info(f"Associando subnet '{subnet_id}' à tabela de roteamento '{route_table_id}'.")
                 ec2_client.associate_route_table(
                     RouteTableId=route_table_id,
@@ -168,6 +193,7 @@ def associate_subnets_to_route_table(route_table_id, subnet_ids, region,
                 logging.info(f"Subnet '{subnet_id}' associada com sucesso à tabela de roteamento '{route_table_id}'.")
                 successful_associations.append(subnet_id)
             else:
+                logging.info(f"Subnet '{subnet_id}' já está explicitamente associada à tabela de roteamento '{route_table_id}'.")
                 successful_associations.append(subnet_id) # Considera sucesso se já estava associada
 
         except Exception as e:
@@ -208,52 +234,6 @@ def create_private_nat_gateway(subnet_id, region,
         logging.error(f"Erro ao criar NAT Gateway privado: {e}")
         return None
 
-def get_vpc_cidrs(vpc_id, region, aws_access_key_id, aws_secret_access_key, aws_session_token):
-    """
-    Lista todos os CIDRs associados a uma VPC.
-    Retorna uma lista de CIDRs.
-    """
-    ec2_client = get_aws_client('ec2', region, aws_access_key_id, aws_secret_access_key, aws_session_token)
-    logging.info(f"Buscando todos os CIDRs associados à VPC '{vpc_id}'")
-    cidrs = []
-    try:
-        response = ec2_client.describe_vpcs(VpcIds=[vpc_id])
-        for vpc in response['Vpcs']:
-            cidrs.append(vpc['CidrBlock'])
-            for association in vpc.get('CidrBlockAssociations', []):
-                if association['CidrBlockState']['State'] == 'associated':
-                    cidrs.append(association['CidrBlock'])
-        logging.info(f"CIDRs encontrados na VPC '{vpc_id}': {list(set(cidrs))}")
-        return list(set(cidrs)) # Retorna apenas CIDRs únicos
-    except Exception as e:
-        logging.error(f"Erro ao listar CIDRs da VPC: {e}")
-        return []
-
-def get_subnets_by_cidr_prefix(vpc_id, cidr_prefix, region,
-                               aws_access_key_id, aws_secret_access_key, aws_session_token):
-    """
-    Retorna IDs de subnets em uma VPC que começam com um determinado prefixo CIDR.
-    """
-    ec2_client = get_aws_client('ec2', region, aws_access_key_id, aws_secret_access_key, aws_session_token)
-    logging.info(f"Buscando subnets na VPC '{vpc_id}' com CIDR prefixo '{cidr_prefix}'")
-    found_subnet_ids = []
-    try:
-        response = ec2_client.describe_subnets(
-            Filters=[
-                {'Name': 'vpc-id', 'Values': [vpc_id]},
-                {'Name': 'cidr-block', 'Values': [f'{cidr_prefix}*']} # Filtra por prefixo
-            ]
-        )
-        for subnet in response['Subnets']:
-            # Verificação adicional para garantir que o CIDR realmente começa com o prefixo
-            if subnet['CidrBlock'].startswith(cidr_prefix.split('/')[0]):
-                 found_subnet_ids.append(subnet['SubnetId'])
-        logging.info(f"Subnets encontradas para CIDR prefixo '{cidr_prefix}': {found_subnet_ids}")
-        return found_subnet_ids
-    except Exception as e:
-        logging.error(f"Erro ao buscar subnets por prefixo CIDR: {e}")
-        return []
-
 def get_subnet_for_nat_gateway(vpc_id, main_vpc_cidr, region,
                                aws_access_key_id, aws_secret_access_key, aws_session_token):
     """
@@ -264,42 +244,47 @@ def get_subnet_for_nat_gateway(vpc_id, main_vpc_cidr, region,
     logging.info(f"Buscando subnet para NAT Gateway no CIDR '{main_vpc_cidr}' da VPC '{vpc_id}'")
     
     try:
-        response = ec2_client.describe_subnets(
-            Filters=[
-                {'Name': 'vpc-id', 'Values': [vpc_id]},
-                {'Name': 'cidr-block', 'Values': [main_vpc_cidr]} # Filtra estritamente pelo CIDR principal
-            ]
-        )
-        
+        # Filtra subnets que estão dentro do main_vpc_cidr
+        # Usamos uma estratégia de iteração pois o filtro 'cidr-block' com '*' pode não ser preciso o suficiente
+        all_subnets_in_vpc = ec2_client.describe_subnets(
+            Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}]
+        )['Subnets']
+
+        main_network = ipaddress.ip_network(main_vpc_cidr)
         candidate_subnets = []
-        for subnet in response['Subnets']:
-            # Tenta encontrar uma subnet que seja pública (AutoAssignPublicIp) e tenha um nome público
-            if subnet.get('MapPublicIpOnLaunch', False):
-                for tag in subnet.get('Tags', []):
-                    if tag['Key'] == 'Name' and 'public' in tag['Value'].lower():
-                        logging.info(f"Subnet pública ideal para NAT Gateway encontrada: {subnet['SubnetId']}")
-                        return subnet['SubnetId']
-                candidate_subnets.append(subnet['SubnetId'])
-            else:
-                candidate_subnets.append(subnet['SubnetId'])
-        
-        if candidate_subnets:
-            logging.info(f"Nenhuma subnet 'public' ideal encontrada. Usando a primeira subnet candidata no CIDR '{main_vpc_cidr}': {candidate_subnets[0]}")
-            return candidate_subnets[0]
-        else:
-            logging.warning(f"Nenhuma subnet encontrada no CIDR '{main_vpc_cidr}' na VPC '{vpc_id}'.")
+
+        for subnet in all_subnets_in_vpc:
+            subnet_network = ipaddress.ip_network(subnet['CidrBlock'])
+            if subnet_network.subnet_of(main_network):
+                candidate_subnets.append(subnet)
+
+        if not candidate_subnets:
+            logging.warning(f"Nenhuma subnet encontrada dentro do CIDR '{main_vpc_cidr}' na VPC '{vpc_id}'.")
             return None
+            
+        # Prioriza subnets com tags de nome 'public'
+        for subnet in candidate_subnets:
+            for tag in subnet.get('Tags', []):
+                if tag['Key'] == 'Name' and 'public' in tag['Value'].lower():
+                    logging.info(f"Subnet pública ideal para NAT Gateway encontrada: {subnet['SubnetId']}")
+                    return subnet['SubnetId']
+        
+        # Se nenhuma subnet 'public' for encontrada, retorna a primeira candidata
+        logging.info(f"Nenhuma subnet 'public' ideal encontrada. Usando a primeira subnet candidata no CIDR '{main_vpc_cidr}': {candidate_subnets[0]['SubnetId']}")
+        return candidate_subnets[0]['SubnetId']
     except Exception as e:
         logging.error(f"Erro ao encontrar subnet para NAT Gateway: {e}")
         return None
 
-def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, tag_name, region,
+
+def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, tag_name_prefix, region,
                    aws_access_key_id, aws_secret_access_key, aws_session_token):
     """
     Cria um número especificado de subnets em diferentes AZs a partir de um CIDR block base.
     As subnets serão divididas com o subnet_prefix_length.
     Usará somente as AZs 'sa-east-1a' e 'sa-east-1b'.
     Retorna uma lista de IDs das subnets criadas.
+    As tags de nome serão 'app-non-routable-[AZ]' e 'database-non-routable-[AZ]'.
     """
     ec2_client = get_aws_client('ec2', region, aws_access_key_id, aws_secret_access_key, aws_session_token)
     logging.info(f"Iniciando a criação de {num_subnets} subnets na VPC '{vpc_id}' a partir do CIDR base '{base_cidr_block}' com prefixo /{subnet_prefix_length}")
@@ -354,6 +339,12 @@ def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, t
             
             subnet_cidr = str(subnets_to_create_cidrs[i])
             
+            # Definir o nome da tag com base no requisito
+            # Alterna entre 'app' e 'database' para os nomes
+            tag_name_suffix = 'app' if i % 2 == 0 else 'database'
+            final_tag_name = f"{tag_name_prefix}-{tag_name_suffix}-non-routable-{az_suffixes.get(az_name, az_name.split('-')[-1])}"
+
+
             # Verificar se já existe uma subnet com este CIDR e AZ na VPC
             existing_subnets = ec2_client.describe_subnets(
                 Filters=[
@@ -368,7 +359,7 @@ def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, t
                 logging.info(f"Subnet com CIDR '{subnet_cidr}' e AZ '{az_name}' já existe na VPC '{vpc_id}' como '{subnet_id}'. Reutilizando.")
                 created_subnet_ids.append(subnet_id)
             else:
-                logging.info(f"Tentando criar subnet com CIDR '{subnet_cidr}' na AZ '{az_name}'")
+                logging.info(f"Tentando criar subnet com CIDR '{subnet_cidr}' na AZ '{az_name}' com tag: {final_tag_name}")
                 try:
                     subnet = ec2_client.create_subnet(
                         VpcId=vpc_id,
@@ -378,7 +369,7 @@ def create_subnets(vpc_id, base_cidr_block, num_subnets, subnet_prefix_length, t
                             {
                                 'ResourceType': 'subnet',
                                 'Tags': [
-                                    {'Key': 'Name', 'Value': f"{tag_name}-subnet-{az_suffixes.get(az_name, az_name.split('-')[-1])}-{i}"},
+                                    {'Key': 'Name', 'Value': final_tag_name},
                                     {'Key': 'ManagedBy', 'Value': 'HarnessPipeline'}
                                 ]
                             },
@@ -434,7 +425,7 @@ def create_new_route_table_and_associate(vpc_id, subnet_ids, nat_gateway_id, reg
 
         for subnet_id in subnet_ids:
             try:
-                # Verifica se a subnet já está associada a esta tabela de roteamento
+                # Verifica se a subnet já está explicitamente associada a esta tabela de roteamento
                 current_associations = ec2_client.describe_route_tables(
                     Filters=[
                         {'Name': 'association.subnet-id', 'Values': [subnet_id]},
@@ -442,25 +433,23 @@ def create_new_route_table_and_associate(vpc_id, subnet_ids, nat_gateway_id, reg
                     ]
                 )['RouteTables']
 
-                already_associated = False
-                if current_associations:
-                    for current_rt in current_associations:
-                        for assoc in current_rt.get('Associations', []):
-                            if assoc.get('SubnetId') == subnet_id and assoc.get('RouteTableId') == route_table_id:
-                                logging.info(f"Subnet '{subnet_id}' já está associada à nova tabela de roteamento '{route_table_id}'.")
-                                already_associated = True
-                                break
-                        if already_associated:
+                already_explicitly_associated = False
+                for rt in current_associations:
+                    for assoc in rt.get('Associations', []):
+                        if assoc.get('SubnetId') == subnet_id and assoc.get('RouteTableId') == route_table_id and not assoc.get('Main', False):
+                            already_explicitly_associated = True
                             break
+                    if already_explicitly_associated:
+                        break
 
-                if not already_associated:
+                if not already_explicitly_associated:
                     ec2_client.associate_route_table(
                         RouteTableId=route_table_id,
                         SubnetId=subnet_id
                     )
                     logging.info(f"Subnet '{subnet_id}' associada à nova tabela de roteamento '{route_table_id}'.")
                 else:
-                    logging.info(f"Subnet '{subnet_id}' já estava associada à nova tabela de roteamento '{route_table_id}'.")
+                    logging.info(f"Subnet '{subnet_id}' já estava explicitamente associada à nova tabela de roteamento '{route_table_id}'.")
 
             except Exception as e:
                 logging.error(f"Erro ao associar subnet '{subnet_id}' à nova tabela de roteamento '{route_table_id}': {e}")
@@ -469,15 +458,41 @@ def create_new_route_table_and_associate(vpc_id, subnet_ids, nat_gateway_id, reg
         logging.error(f"Erro ao criar e associar nova tabela de roteamento: {e}")
         return None
 
+def get_existing_subnets_in_cidr(vpc_id, cidr_block, region,
+                                  aws_access_key_id, aws_secret_access_key, aws_session_token):
+    """
+    Retorna uma lista de IDs de subnets existentes dentro de um bloco CIDR específico na VPC.
+    """
+    ec2_client = get_aws_client('ec2', region, aws_access_key_id, aws_secret_access_key, aws_session_token)
+    logging.info(f"Buscando subnets existentes no CIDR '{cidr_block}' da VPC '{vpc_id}'.")
+    
+    found_subnet_ids = []
+    try:
+        target_network = ipaddress.ip_network(cidr_block)
+        response = ec2_client.describe_subnets(
+            Filters=[
+                {'Name': 'vpc-id', 'Values': [vpc_id]},
+            ]
+        )
+        for subnet in response['Subnets']:
+            subnet_network = ipaddress.ip_network(subnet['CidrBlock'])
+            if subnet_network.subnet_of(target_network):
+                found_subnet_ids.append(subnet['SubnetId'])
+        logging.info(f"Subnets encontradas no CIDR '{cidr_block}': {found_subnet_ids}")
+        return found_subnet_ids
+    except Exception as e:
+        logging.error(f"Erro ao buscar subnets existentes no CIDR '{cidr_block}': {e}")
+        return []
+
 def main():
     parser = argparse.ArgumentParser(description="Script para configurar recursos de rede AWS em uma pipeline Harness.")
     parser.add_argument('--region', type=str, default='sa-east-1', help='Região AWS a ser usada.')
     parser.add_argument('--vpc-id', type=str, required=True, help='ID da VPC onde os recursos serão criados.')
     parser.add_argument('--security-group-ids', nargs='+', required=True, help='IDs dos Security Groups para os VPC Endpoints.')
     parser.add_argument('--num-subnets', type=int, default=4, help='Número de subnets desejadas para o CIDR 100.99.0.0/16 (recomenda-se 2 ou 4 para AZs a e b).')
-    parser.add_argument('--subnet-prefix-length', type=int, default=20, help='Comprimento do prefixo das novas subnets do 100.99.0.0/16 (e.g., 20 para /20).') # Mudado para 20
-    parser.add_argument('--new-subnet-tag-name', type=str, default='Harness-Managed-Private', help='Tag Name para as novas subnets criadas (do 100.99.0.0/16).') # Renomeado para clareza
-    parser.add_argument('--new-routable-cidr', type=str, default='100.99.0.0/16', help='CIDR a ser dividido em novas subnets (este será o CIDR "não roteável" via TGW).') # Renomeado para clareza
+    parser.add_argument('--subnet-prefix-length', type=int, default=20, help='Comprimento do prefixo das novas subnets do 100.99.0.0/16 (e.g., 20 para /20).')
+    parser.add_argument('--new-subnet-tag-name-prefix', type=str, default='Harness', help='Prefixo do Tag Name para as novas subnets criadas (do 100.99.0.0/16). As tags finais serão 'Harness-app-non-routable-[AZ]' ou 'Harness-database-non-routable-[AZ]').')
+    parser.add_argument('--non-routable-cidr', type=str, default='100.99.0.0/16', help='CIDR a ser dividido em novas subnets (este será o CIDR "não roteável" via TGW).')
     parser.add_argument('--main-vpc-cidr', type=str, required=True, help='CIDR principal da VPC onde o NAT Gateway deve ser criado e onde as subnets roteáveis existentes estão.') # NOVO ARGUMENTO
 
     args = parser.parse_args()
@@ -519,14 +534,14 @@ def main():
         logging.error("Falha ao criar NAT Gateway privado. Abortando.")
         exit(1)
 
-    # 4. Criar as novas subnets (do new_routable_cidr, e.g., 100.99.0.0/16)
-    logging.info(f"Passo 4: Criando as novas subnets a partir do CIDR '{args.new_routable_cidr}' (somente AZs 'a' e 'b').")
+    # 4. Criar as novas subnets (do non-routable-cidr, e.g., 100.99.0.0/16)
+    logging.info(f"Passo 4: Criando as novas subnets a partir do CIDR '{args.non_routable_cidr}' (somente AZs 'a' e 'b').")
     created_subnets = create_subnets(
         args.vpc_id,
-        args.new_routable_cidr,
+        args.non_routable_cidr,
         args.num_subnets,
         args.subnet_prefix_length,
-        args.new_subnet_tag_name,
+        args.new_subnet_tag_name_prefix,
         args.region,
         aws_access_key_id, aws_secret_access_key, aws_session_token
     )
@@ -536,7 +551,7 @@ def main():
         exit(1)
 
     # 5. Criar uma NOVA Tabela de Roteamento para as Novas Subnets e associá-las, com rota para NAT GW
-    logging.info("Passo 5: Criando uma NOVA tabela de roteamento para as subnets recém-criadas (100.99.0.0/16) e associando-as com rota para NAT Gateway.")
+    logging.info("Passo 5: Criando uma NOVA tabela de roteamento para as subnets recém-criadas (do 100.99.0.0/16) e associando-as com rota para NAT Gateway.")
     new_non_routable_rt_id = create_new_route_table_and_associate(
         args.vpc_id,
         created_subnets,
@@ -552,9 +567,9 @@ def main():
     # 6. Associar subnets EXISTENTES do main_vpc_cidr à Tabela de Roteamento do TGW
     logging.info(f"Passo 6: Verificando e associando subnets existentes do CIDR '{args.main_vpc_cidr}' à Tabela de Roteamento do TGW ('{routable_route_table_id}').")
     
-    existing_main_cidr_subnets = get_subnets_by_cidr_prefix(
+    existing_main_cidr_subnets = get_existing_subnets_in_cidr(
         args.vpc_id,
-        args.main_vpc_cidr.split('/')[0], # Pega apenas o prefixo do IP para a busca
+        args.main_vpc_cidr, 
         args.region,
         aws_access_key_id, aws_secret_access_key, aws_session_token
     )
@@ -571,11 +586,24 @@ def main():
         logging.warning(f"Nenhuma subnet existente encontrada no CIDR '{args.main_vpc_cidr}' para associação à RT do TGW.")
 
     # 7. Criar VPC Endpoints (nas novas subnets do 100.99.0.0/16)
-    logging.info("Passo 7: Criando VPC Endpoints nas subnets recém-criadas (do 100.99.0.0/16).")
+    logging.info("Passo 7: Criando VPC Endpoints nas subnets recém-criadas (do 100.99.0.0/16) e Gateway Endpoints.")
+    
+    # Lidar com S3 Gateway Endpoint
+    s3_service_name = 'com.amazonaws.sa-east-1.s3'
     create_vpc_endpoints(
-        service_endpoints_to_create,
+        [s3_service_name], # S3 tratado separadamente como Gateway
         args.vpc_id,
-        created_subnets, # Usar as subnets do 100.99.0.0/16 para os endpoints
+        [], # Subnet IDs não são usadas para Gateway Endpoints
+        [], # Security Group IDs não são usadas para Gateway Endpoints
+        args.region,
+        aws_access_key_id, aws_secret_access_key, aws_session_token
+    )
+
+    # Lidar com Interface Endpoints
+    create_vpc_endpoints(
+        service_endpoints_to_create, # Lista de Interface Endpoints
+        args.vpc_id,
+        created_subnets, # Usar as subnets do 100.99.0.0/16 para os endpoints de interface
         args.security_group_ids,
         args.region,
         aws_access_key_id, aws_secret_access_key, aws_session_token
