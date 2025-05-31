@@ -1,0 +1,370 @@
+{
+  "user_name": "ecs-aws",
+  "subnet_ids": [
+    "subnet-03800d4f71f1f2391",
+    "subnet-0374497d2f7a6c038"
+  ],
+  "author_groups": [
+    "sg-0f0a00b0f023f4",
+    "sg-0f0a00b0f023f4"
+  ],
+  "services": [
+    {
+      "environment_name": "TASK-FLASK-SERVICE",
+      "taskDefinitionFamilyName": "flask-service-task-def-nl",
+      "containerName": "flask-app",
+      "volumes": [],
+      "host": {
+        "sourceVolume": "tomcat-volume",
+        "path": ""
+      },
+      "container_definitions": [
+        {
+          "name": "flask-demo-container",
+          "image": "748937488101.dkr.ecr.us-east-2.amazonaws.com/python-demo-repository:latest",
+          "port_mappings": [
+            {
+              "containerPort": 8080,
+              "hostPort": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "essential": true,
+          "command": [
+            "sh",
+            "-c",
+            "python",
+            "server.py",
+            "&"
+          ],
+          "entryPoint": [],
+          "environment": [],
+          "mountPoints": [
+            {
+              "sourceVolume": "tomcat-volume",
+              "containerPath": "/usr/local/tomcat/",
+              "readOnly": false
+            }
+          ],
+          "volumesFrom": [],
+          "logConfiguration": {
+            "logDriver": "awslogs",
+            "options": {
+              "awslogs-group": "flask-service-logs",
+              "awslogs-region": "us-east-2",
+              "awslogs-stream-prefix": "ecs"
+            }
+          },
+          "healthCheck": {
+            "command": [
+              "sh",
+              "-c",
+              "curl",
+              "-f",
+              "http://localhost:8080/health"
+            ],
+            "interval": 30,
+            "timeout": 5,
+            "retries": 3,
+            "startPeriod": 0
+          },
+          "systemControls": []
+        },
+        {
+          "name": "nginx-daemon",
+          "image": "nginx/nginx-way-daemon:latest",
+          "port_mappings": [
+            {
+              "containerPort": 80,
+              "hostPort": 80,
+              "protocol": "tcp"
+            }
+          ]
+        }
+      ],
+      "family": "flask-service",
+      "taskRoleArn": "arn:aws:iam::748937488101:role/ecsTaskExecutionRole",
+      "alb_listener_port": 8080 // Adicionar a porta do ALB para este serviço
+    }
+  ]
+}
+#locals.tf
+locals {
+  name             = var.terraform-aws-ecs-fargate-ecs-cluster_with_alb_cluster_name
+  tags             = var.terraform-aws-ecs-fargate-ecs-cluster_with_alb_tags
+  azs              = slice(data.aws_availability_zones.available.names, 0, 3)
+  region           = var.terraform-aws-ecs-fargate-ecs-cluster_with_alb_location
+  additional_sg    = var.terraform-aws-ecs-fargate-ecs-cluster_with_alb_security_group_required ? var.terraform-aws-ecs-fargate-ecs-cluster_with_alb_additional_security_group_lb : ""
+  list_cw_arns     = {
+    eu-central-1 = "fca5375d-80fd-4354-a936-473c99bd1739"
+    eu-north-1   = "de6cfb9b-a94d-47cd-8a57-3c2ae7c6b30e"
+    eu-west-1    = "2d6cdb8e-c1f4-4267-86b5-25de56f8c3d7"
+    eu-west-2    = "3761f658-fd3a-4ba7-9a42-210c97245c44"
+    eu-west-3    = "a35f7296-263a-4fa4-8e4e-11ea34a57f4f"
+    sa-east-1    = "60a6c7fc-430a-49f4-85bd-5c7d139bb645"
+    us-east-1    = "6f8c45cc-97d5-41c6-9165-18fe4646a01d"
+    us-east-2    = "f490a2b3-9120-4b32-87eb-aa9db540f8e4"
+    us-west-1    = "cdb67ae0-5f60-4195-b527-959d76ef4234"
+    us-west-2    = "3467d16d-8930-4b45-81d1-f509ef4e57a3"
+    me-central-1 = "8bb01d38-0aff-4fb6-8d5b-9dcdb6ec9ea9"
+  }
+
+  env          = var.terraform-aws-ecs-fargate-ecs-service_environment
+  base_path    = var.terraform-aws-ecs-fargate-ecs-service_base_path
+  service_data = jsondecode(file(local.base_path))
+
+  env_vars  = try(local.service_data.env_vars, {})
+  services  = try(local.service_data.services, {})
+}
+#ecs
+data "aws_ecs_cluster" "cluster" {
+  cluster_name = local.env_vars.cluster_name
+  depends_on   = [
+    module.terraform-aws-ecs-fargate_ecs_cluster_with_alb_ecs-cluster
+  ]
+}
+
+# Novo Recurso: Target Group para cada serviço
+resource "aws_lb_target_group" "service_target_group" {
+  for_each = local.services
+
+  name_prefix          = "${each.value.servicename}-tg-"
+  port                 = lookup(each.value, "alb_listener_port", 80) # Pega a porta do services.tfvars.auto.json, ou 80 como default
+  protocol             = "HTTP"
+  vpc_id               = data.aws_vpc.vpc_id.id # Assume que vpc_id é acessível aqui
+  target_type          = "ip" # Fargate usa IP como tipo de alvo
+
+  health_check {
+    enabled            = true
+    interval           = 30
+    path               = "/" # Ajuste o path conforme a saúde do seu serviço
+    protocol           = "HTTP"
+    timeout            = 5
+    healthy_threshold  = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(local.tags, {
+    "Service" = each.value.servicename
+  })
+}
+
+module "terraform-aws-ecs-fargate-ecs-service" {
+  source  = "git@lqrzfe01.onefiserv.net:fiserv-main/ecs/fargate/aws//modules/service"
+  version = "1.0.5"
+
+  depends_on = [
+    module.terraform-aws-ecs-fargate_ecs_cluster_with_alb_ecs-cluster,
+    aws_lb_target_group.service_target_group # Depende da criação do Target Group
+  ]
+
+  for_each = { for svc in local.services : svc.servicename => svc }
+
+  family                     = each.value.taskdefinitionfamilyname
+  enable_execute_command     = true
+  create_task_exec_iam_role  = false
+  create_task_exec_policy    = false
+  create_tasks_iam_role      = false
+  create_security_group      = false
+  ecs_tasks_iam_role_arn     = var.terraform-aws-ecs-fargate-ecs-service_ecs-iam-role-arn
+  ecs_exec_iam_role_arn      = var.terraform-aws-ecs-fargate-ecs-service_exec-iam-role-arn
+  name                       = each.value.servicename
+  cluster_arn                = data.aws_ecs_cluster.cluster.arn
+  launch_type                = var.terraform-aws-ecs-fargate-ecs-service_launch-type
+  requires_compatibilities   = ["FARGATE"]
+  network_mode               = "awsvpc"
+  cpu                        = 2048
+  memory                     = 4096
+  desired_count              = each.value.desired_count
+  container_definitions      = each.value.container_definitions
+  volumes                    = lookup(each.value, "volumes", [])
+
+  load_balancer = {
+    service = {
+      target_group_arn = aws_lb_target_group.service_target_group[each.key].arn # Referencia o Target Group criado
+      container_name   = each.value.container_definitions[0].name
+      container_port   = each.value.container_definitions[0].port_mappings[0].containerPort
+    }
+  }
+
+  security_group_ids = local.env_vars.security_groups
+  subnet_ids         = local.env_vars.subnet_ids
+  assign_public_ip   = false
+
+  runtime_platform = {
+    cpu_architecture        = "X86_64",
+    operating_system_family = "LINUX"
+  }
+  service_tags = {
+    "ServiceTag" = each.value.service_tags
+  }
+  tags = var.terraform-aws-ecs-fargate-ecs-service_environment-tags
+}
+
+#alb
+data "aws_vpc" "vpc_id" {
+  provider = aws.terraform-aws-alb_alb_with_custom_security_group
+  id       = var.terraform-aws-alb-alb_with_custom_security_group_vpc_id
+}
+
+data "aws_instances" "ec2_web_instances" {
+  provider = aws.terraform-aws-alb_alb_with_custom_security_group
+}
+
+data "aws_route53_zone" "private_hosted_zone" {
+  provider = aws.terraform-aws-alb_alb_with_custom_security_group
+  name     = var.terraform-aws-alb-alb_custom_security_group_route53_hosted_zone_name
+  private_zone = true
+}
+
+data "aws_subnet" "routable-subnet-a" {
+  provider = aws.terraform-aws-alb_alb_with_custom_security_group
+  vpc_id   = var.terraform-aws-alb_alb_with_custom_security_group_vpc_id
+  filter {
+    name   = "tag:Name"
+    values = ["app/a"]
+  }
+}
+
+data "aws_subnet" "routable-subnet-b" {
+  provider = aws.terraform-aws-alb_alb_with_custom_security_group
+  vpc_id   = var.terraform-aws-alb-alb_custom_security_group_vpc_id
+  filter {
+    name   = "tag:Name"
+    values = ["app/b"]
+  }
+}
+
+# Módulo ALB para cada serviço
+module "terraform-aws-alb-alb_custom_security_group" {
+  for_each = local.services # Criará um ALB para cada serviço
+
+  source  = "git@github.com:net/serv-main/alb/aws"
+  version = "1.0.5"
+
+  providers = {
+    aws = aws.terraform-aws-alb-alb_with_custom_security_group
+  }
+
+  internal    = true
+  idle_timeout = 60
+  name        = "${each.value.servicename}-alb" # Nome único para cada ALB
+  http_enabled = true # Ou baseie em uma variável se necessário
+  https_enabled = false # Ou baseie em uma variável se necessário
+  # acm_id e domain_name podem ser removidos ou adaptados se HTTPS não for universalmente necessário
+  # zone_id e route53_enabled também podem ser adaptados ou removidos
+
+  subnets = [
+    {
+      subnet_id          = data.aws_subnet.routable-subnet-a.id
+      private_ipv4_address = null
+      ipv6_address       = null
+      allocation_id      = null
+    },
+    {
+      subnet_id          = data.aws_subnet.routable-subnet-b.id
+      private_ipv4_address = null
+      ipv6_address       = null
+      allocation_id      = null
+    }
+  ]
+
+  # Aqui você associa o Target Group específico do serviço a este ALB
+  target_groups = {
+    "${each.key}-tg" = {
+      target_group_arn = aws_lb_target_group.service_target_group[each.key].arn
+      port             = lookup(each.value, "alb_listener_port", 80) # Porta do Listener
+      protocol         = "HTTP"
+      # Outras configurações do target group se o módulo ALB as aceitar
+    }
+  }
+
+  listeners = {
+    "http-listener" = {
+      port        = lookup(each.value, "alb_listener_port", 80)
+      protocol    = "HTTP"
+      default_actions = [{
+        type             = "forward"
+        target_group_name = "${each.key}-tg" # Nome do Target Group referenciado acima
+      }]
+    }
+  }
+
+  tags = merge(local.tags, {
+    "Service" = each.value.servicename
+  })
+  depends_on = [
+    aws_lb_target_group.service_target_group, # Depende do Target Group
+    aws_security_group.alb-sg[each.key] # Depende do Security Group do ALB
+  ]
+}
+
+# Security Group para cada ALB
+resource "aws_security_group" "alb-sg" {
+  for_each = local.services
+
+  provider    = aws.terraform-aws-alb_alb_with_custom_security_group
+  name        = "${each.value.servicename}-alb-sg"
+  description = "AWS Security Group for ALB for ${each.value.servicename}"
+  vpc_id      = data.aws_vpc.vpc_id.id
+
+  ingress {
+    from_port   = lookup(each.value, "alb_listener_port", 80) # Porta do Listener
+    to_port     = lookup(each.value, "alb_listener_port", 80)
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Ou restrinja para IPs específicos
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.tags, {
+    "Service" = each.value.servicename
+  })
+}
+
+# Rota 53 para cada ALB
+resource "aws_route53_record" "service_alb_record_weighted" {
+  for_each = local.services
+
+  provider       = aws.terraform-aws-alb-alb_with_custom_security_group
+  zone_id        = data.aws_route53_zone.private_hosted_zone.id
+  name           = "${each.value.servicename}.example.com" # Nome do domínio para o serviço
+  type           = "A"
+  aliases {
+    name                   = module.terraform-aws-alb-alb_custom_security_group[each.key].dns_name
+    zone_id                = module.terraform-aws-alb-alb_custom_security_group[each.key].zone_id
+    evaluate_target_health = true
+  }
+
+  weighted_routing_policy {
+    weight = 100
+  }
+
+  set_identifier = "primary"
+}
+
+resource "aws_route53_record" "service_alb_record_dr" {
+  for_each = local.services # Assumindo que você quer um registro DR para cada serviço
+
+  provider       = aws.terraform-aws-alb-alb_with_custom_security_group
+  count          = "${var.terraform-aws-alb-alb_custom_security_group_alb_prod_dr}" ? 1 : 0 # Ajuste se o DR for por serviço
+  zone_id        = data.aws_route53_zone.private_hosted_zone.id
+  name           = "${each.value.servicename}-dr.example.com" # Nome do domínio DR para o serviço
+  type           = "A"
+  aliases {
+    name                   = module.terraform-aws-alb-alb_custom_security_group[each.key].dns_name
+    zone_id                = module.terraform-aws-alb-alb_custom_security_group[each.key].zone_id
+    evaluate_target_health = true
+  }
+
+  weighted_routing_policy {
+    weight = 0
+  }
+
+  set_identifier = "dr"
+}
