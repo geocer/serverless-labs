@@ -1,0 +1,120 @@
+import tfe
+import os
+
+# --- Configurações do Terraform Enterprise ---
+TFE_HOSTNAME = "app.terraform.io"  # Ou seu hostname customizado do Terraform Enterprise
+TFE_TOKEN = os.environ.get("TFE_TOKEN") # Recomenda-se usar uma variável de ambiente para o token
+ORGANIZATION_NAME = "sua-organizacao" # Substitua pela sua organização
+PROJECT_NAME = "seu-projeto" # Substitua pelo seu projeto (pode ser "default" se não usar projetos)
+
+# --- Configurações do Workspace ---
+WORKSPACE_NAME = "meu-novo-workspace-gitlab" # Nome do workspace a ser criado
+VCS_IDENTIFIER = "seu-usuario-gitlab" # O nome de usuário do GitLab registrado como VCS Provider no TFE
+GITLAB_REPOSITORY = "seu-usuario-gitlab/seu-repositorio" # Ex: "seu-grupo/seu-projeto"
+DEFAULT_BRANCH = "main" # Ex: "main", "master", etc.
+TERRAFORM_WORKING_DIRECTORY = "terraform" # Ex: "env/dev", "my-app", etc.
+
+# --- Variáveis do Workspace (sensitive = True para variáveis sensíveis) ---
+WORKSPACE_VARIABLES = [
+    {"key": "AWS_ACCESS_KEY_ID", "value": "SUA_ACCESS_KEY_ID_AQUI", "category": "env", "sensitive": True, "description": "AWS Access Key ID"},
+    {"key": "AWS_SECRET_ACCESS_KEY", "value": "SUA_SECRET_ACCESS_KEY_AQUI", "category": "env", "sensitive": True, "description": "AWS Secret Access Key"},
+    {"key": "AWS_DEFAULT_REGION", "value": "us-east-1", "category": "env", "sensitive": False, "description": "AWS Default Region"},
+]
+
+def create_terraform_workspace():
+    """
+    Cria um workspace no Terraform Enterprise, conecta-o a um repositório GitLab
+    e configura as variáveis de ambiente necessárias.
+    """
+    if not TFE_TOKEN:
+        print("Erro: A variável de ambiente TFE_TOKEN não está definida. Por favor, defina-a.")
+        return
+
+    try:
+        # Inicializa o cliente TFE
+        client = tfe.Client(host=TFE_HOSTNAME, token=TFE_TOKEN)
+
+        # Busca a organização
+        organization = client.organizations.read(ORGANIZATION_NAME)
+        print(f"Organização '{organization.name}' encontrada.")
+
+        # Busca ou cria o projeto (se o TFE suportar projetos e for necessário)
+        try:
+            project = client.projects.read(organization_id=organization.id, project_name=PROJECT_NAME)
+            print(f"Projeto '{project.name}' encontrado.")
+        except tfe.exceptions.NotFound:
+            print(f"Projeto '{PROJECT_NAME}' não encontrado. Tentando criar...")
+            project = client.projects.create(organization_id=organization.id, project_name=PROJECT_NAME)
+            print(f"Projeto '{project.name}' criado com sucesso.")
+
+
+        # Verifica se o workspace já existe
+        try:
+            workspace = client.workspaces.read(organization_name=organization.name, workspace_name=WORKSPACE_NAME)
+            print(f"Workspace '{WORKSPACE_NAME}' já existe. Atualizando configurações...")
+        except tfe.exceptions.NotFound:
+            print(f"Workspace '{WORKSPACE_NAME}' não encontrado. Criando novo workspace...")
+
+            # Cria o workspace
+            workspace = client.workspaces.create(
+                organization_id=organization.id,
+                name=WORKSPACE_NAME,
+                project_id=project.id,
+                vcs_repo={
+                    "identifier": GITLAB_REPOSITORY,
+                    "oauth_token_id": client.oauth_tokens.list(organization_id=organization.id, provider_id=VCS_IDENTIFIER).data[0].id,
+                    "branch": DEFAULT_BRANCH,
+                    "default_branch": True,
+                    "ingress_submodules": False
+                },
+                working_directory=TERRAFORM_WORKING_DIRECTORY,
+                terraform_version="1.5.7" # Especifique a versão do Terraform
+                # Adicione outras configurações do workspace aqui, se necessário (e.g., auto_apply=True)
+            )
+            print(f"Workspace '{workspace.name}' criado com sucesso (ID: {workspace.id}).")
+
+        # Configura as variáveis do workspace
+        print("Configurando variáveis do workspace...")
+        existing_vars = {var.key: var for var in client.vars.list(workspace_id=workspace.id).data}
+
+        for var_data in WORKSPACE_VARIABLES:
+            var_key = var_data["key"]
+            var_value = var_data["value"]
+            var_category = var_data["category"]
+            var_sensitive = var_data["sensitive"]
+            var_description = var_data.get("description", "")
+
+            if var_key in existing_vars:
+                # Atualiza a variável se ela já existe
+                print(f"Variável '{var_key}' já existe. Atualizando...")
+                client.vars.update(
+                    var_id=existing_vars[var_key].id,
+                    key=var_key,
+                    value=var_value,
+                    category=var_category,
+                    sensitive=var_sensitive,
+                    description=var_description
+                )
+            else:
+                # Cria a variável se ela não existe
+                print(f"Criando variável '{var_key}'...")
+                client.vars.create(
+                    workspace_id=workspace.id,
+                    key=var_key,
+                    value=var_value,
+                    category=var_category,
+                    sensitive=var_sensitive,
+                    description=var_description
+                )
+        print("Variáveis do workspace configuradas com sucesso.")
+
+        print("\nProcesso concluído!")
+        print(f"Acesse seu workspace em: {TFE_HOSTNAME}/{ORGANIZATION_NAME}/workspaces/{WORKSPACE_NAME}")
+
+    except tfe.exceptions.TerraformCloudClientError as e:
+        print(f"Erro na API do Terraform Cloud/Enterprise: {e}")
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado: {e}")
+
+if __name__ == "__main__":
+    create_terraform_workspace()
