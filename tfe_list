@@ -1,0 +1,60 @@
+import requests
+import os
+
+# --- Configurações do Terraform Enterprise ---
+TFE_HOSTNAME = "https://app.terraform.io"  # Ou seu hostname customizado do Terraform Enterprise
+TFE_TOKEN = os.environ.get("TFE_TOKEN") # Recomenda-se usar uma variável de ambiente para o token
+ORGANIZATION_NAME = "sua-organizacao" # Substitua pela sua organização
+
+def list_vcs_identifiers():
+    """
+    Lista os nomes dos VCS identifiers configurados na organização do Terraform Enterprise.
+    """
+    if not TFE_TOKEN:
+        print("Erro: A variável de ambiente TFE_TOKEN não está definida. Por favor, defina-a.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {TFE_TOKEN}",
+        "Content-Type": "application/vnd.api+json",
+    }
+    
+    # Primeiro, obter o ID da organização
+    try:
+        org_url = f"{TFE_HOSTNAME}/api/v2/organizations/{ORGANIZATION_NAME}"
+        org_response = requests.get(org_url, headers=headers)
+        org_response.raise_for_status()
+        organization_id = org_response.json()["data"]["id"]
+        print(f"Organização '{ORGANIZATION_NAME}' encontrada (ID: {organization_id}).")
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao obter a organização '{ORGANIZATION_NAME}': {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Status Code: {e.response.status_code}")
+            print(f"Response Body: {e.response.text}")
+        return
+
+    # Em seguida, listar os OAuth Tokens (que representam os VCS Providers)
+    try:
+        oauth_tokens_url = f"{TFE_HOSTNAME}/api/v2/organizations/{organization_id}/oauth-tokens"
+        oauth_tokens_response = requests.get(oauth_tokens_url, headers=headers)
+        oauth_tokens_response.raise_for_status()
+        
+        oauth_tokens_data = oauth_tokens_response.json()["data"]
+        
+        if oauth_tokens_data:
+            print("\nNomes dos VCS Identifiers encontrados:")
+            for token in oauth_tokens_data:
+                provider_type = token["attributes"]["provider-type"]
+                provider_username = token["attributes"]["provider-username"]
+                print(f"- Tipo: {provider_type}, Identificador: {provider_username}")
+        else:
+            print(f"Nenhum VCS Identifier encontrado para a organização '{ORGANIZATION_NAME}'.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao listar os VCS Identifiers: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Status Code: {e.response.status_code}")
+            print(f"Response Body: {e.response.text}")
+
+if __name__ == "__main__":
+    list_vcs_identifiers()
