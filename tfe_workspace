@@ -11,7 +11,9 @@ PROJECT_NAME = "seu-projeto" # Substitua pelo seu projeto (pode ser "default" se
 
 # --- Configurações do Workspace ---
 WORKSPACE_NAME = "meu-novo-workspace-gitlab-requests" # Nome do workspace a ser criado
-VCS_IDENTIFIER = "seu-usuario-gitlab" # O nome de usuário do GitLab registrado como VCS Provider no TFE
+# VCS_IDENTIFIER agora deve corresponder ao "service-provider-user" no TFE.
+# EX: Se o nome de usuário do GitLab que você usou para autenticar no TFE for "meu_usuario_gitlab", use isso.
+VCS_IDENTIFIER = "seu-usuario-gitlab"
 GITLAB_REPOSITORY = "seu-usuario-gitlab/seu-repositorio" # Ex: "seu-grupo/seu-projeto"
 DEFAULT_BRANCH = "main" # Ex: "main", "master", etc.
 TERRAFORM_WORKING_DIRECTORY = "terraform" # Ex: "env/dev", "my-app", etc.
@@ -35,17 +37,7 @@ def make_tfe_request(method, path, data=None):
     url = f"{TFE_HOSTNAME}/api/v2/{path}"
 
     try:
-        if method == "GET":
-            response = requests.get(url, headers=headers)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=data)
-        elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=data)
-        elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
-        else:
-            raise ValueError(f"Método HTTP '{method}' não suportado.")
-
+        response = requests.request(method, url, headers=headers, json=data)
         response.raise_for_status() # Lança uma exceção para códigos de status HTTP 4xx/5xx
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -79,9 +71,8 @@ def create_terraform_workspace_with_requests():
                     project_id = proj_data["id"]
                     print(f"Projeto '{PROJECT_NAME}' encontrado (ID: {project_id}).")
                     break
-            if project_id is None:
+            if project_id is None: # Se não encontrou o projeto após iterar
                 raise requests.exceptions.HTTPError(response=requests.Response()) # Simula NotFound
-
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404 or project_id is None: # Se não encontrou o projeto
                 print(f"Projeto '{PROJECT_NAME}' não encontrado. Tentando criar...")
@@ -100,15 +91,36 @@ def create_terraform_workspace_with_requests():
                 raise # Re-lança outros erros HTTP
 
         # 3. Obter ID do OAuth Token para o Provedor VCS (GitLab)
-        oauth_tokens_response = make_tfe_request("GET", f"organizations/{organization_id}/oauth-tokens")
         oauth_token_id = None
+        oauth_tokens_response = make_tfe_request("GET", f"organizations/{organization_id}/oauth-tokens")
+        
+        print(f"Buscando OAuth Token para o identificador '{VCS_IDENTIFIER}'...")
         for token_data in oauth_tokens_response["data"]:
-            if token_data["attributes"]["provider-username"] == VCS_IDENTIFIER and token_data["attributes"]["provider-type"] == "gitlab":
-                oauth_token_id = token_data["id"]
-                print(f"OAuth Token para '{VCS_IDENTIFIER}' encontrado (ID: {oauth_token_id}).")
+            # Extrair o service-provider-user diretamente dos atributos do token
+            current_service_provider_user = token.get("attributes", {}).get("service-provider-user")
+            
+            # Precisamos do ID do oauth-client para buscar o tipo do provedor (GitLab, GitHub, etc.)
+            oauth_client_id = token.get("relationships", {}).get("oauth-client", {}).get("data", {}).get("id")
+            
+            current_provider_type = None
+            if oauth_client_id:
+                try:
+                    # Buscar detalhes do oauth-client para obter o 'service-provider' (tipo de VCS)
+                    oauth_client_details = make_tfe_request("GET", f"oauth-clients/{oauth_client_id}")
+                    current_provider_type = oauth_client_details.get("data", {}).get("attributes", {}).get("service-provider")
+                except requests.exceptions.RequestException as e:
+                    print(f"Aviso: Não foi possível obter detalhes do oauth-client {oauth_client_id}. Erro: {e}")
+                    continue # Pular para o próximo token se não conseguir os detalhes do cliente
+
+            # Verificar se o service-provider-user e o tipo do provedor correspondem
+            # Assumimos que VCS_IDENTIFIER é o service-provider-user E que o provedor é GitLab.
+            if current_service_provider_user == VCS_IDENTIFIER and current_provider_type == "gitlab":
+                oauth_token_id = token["id"]
+                print(f"OAuth Token para '{VCS_IDENTIFIER}' (Tipo: {current_provider_type}) encontrado (ID: {oauth_token_id}).")
                 break
+        
         if not oauth_token_id:
-            raise Exception(f"OAuth Token para o provedor VCS '{VCS_IDENTIFIER}' (GitLab) não encontrado na organização '{ORGANIZATION_NAME}'. Por favor, configure-o no Terraform Enterprise.")
+            raise Exception(f"OAuth Token para o identificador VCS '{VCS_IDENTIFIER}' (GitLab) não encontrado na organização '{ORGANIZATION_NAME}'. Por favor, configure-o no Terraform Enterprise ou verifique o valor de VCS_IDENTIFIER.")
 
         # 4. Criar ou Atualizar Workspace
         workspace_id = None
