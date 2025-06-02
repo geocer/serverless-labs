@@ -95,7 +95,8 @@ def create_terraform_workspace_with_requests():
         oauth_tokens_response = make_tfe_request("GET", f"organizations/{organization_id}/oauth-tokens")
         
         print(f"Buscando OAuth Token para o identificador '{VCS_IDENTIFIER}'...")
-        for token_data in oauth_tokens_response["data"]:
+        # Use 'token' como a variável de iteração, conforme seu traceback.
+        for token in oauth_tokens_response["data"]: 
             # Extrair o service-provider-user diretamente dos atributos do token
             current_service_provider_user = token.get("attributes", {}).get("service-provider-user")
             
@@ -103,7 +104,7 @@ def create_terraform_workspace_with_requests():
             oauth_client_id = token.get("relationships", {}).get("oauth-client", {}).get("data", {}).get("id")
             
             current_provider_type = None
-            if oauth_client_id:
+            if oauth_client_id: 
                 try:
                     # Buscar detalhes do oauth-client para obter o 'service-provider' (tipo de VCS)
                     oauth_client_details = make_tfe_request("GET", f"oauth-clients/{oauth_client_id}")
@@ -115,7 +116,7 @@ def create_terraform_workspace_with_requests():
             # Verificar se o service-provider-user e o tipo do provedor correspondem
             # Assumimos que VCS_IDENTIFIER é o service-provider-user E que o provedor é GitLab.
             if current_service_provider_user == VCS_IDENTIFIER and current_provider_type == "gitlab":
-                oauth_token_id = token["id"]
+                oauth_token_id = token["id"] 
                 print(f"OAuth Token para '{VCS_IDENTIFIER}' (Tipo: {current_provider_type}) encontrado (ID: {oauth_token_id}).")
                 break
         
