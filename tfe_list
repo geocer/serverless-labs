@@ -18,17 +18,7 @@ def make_tfe_request(method, path, data=None):
     url = f"{TFE_HOSTNAME}/api/v2/{path}"
 
     try:
-        if method == "GET":
-            response = requests.get(url, headers=headers)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=data)
-        elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=data)
-        elif method == "DELETE":
-            response = requests.delete(url, headers=headers)
-        else:
-            raise ValueError(f"Método HTTP '{method}' não suportado.")
-
+        response = requests.request(method, url, headers=headers, json=data)
         response.raise_for_status() # Lança uma exceção para códigos de status HTTP 4xx/5xx
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -64,12 +54,21 @@ def list_vcs_identifiers():
         if oauth_tokens_data:
             print("\nNomes dos VCS Identifiers encontrados:")
             for token in oauth_tokens_data:
-                # Usar .get() para acessar atributos para evitar KeyError se a chave não existir
-                provider_type = token.get("attributes", {}).get("provider-type", "N/A")
-                provider_username = token.get("attributes", {}).get("provider-username", "N/A")
+                # O nome do provedor (tipo) está dentro do relacionamento oauth-client
+                oauth_client_id = token.get("relationships", {}).get("oauth-client", {}).get("data", {}).get("id")
 
-                # Adicione uma depuração extra para ver a estrutura completa do token se o erro persistir
-                # print(f"DEBUG: Token completo: {json.dumps(token, indent=2)}")
+                # Se conseguirmos o ID do cliente OAuth, tentamos obter os detalhes dele
+                provider_type = "N/A"
+                if oauth_client_id:
+                    try:
+                        # Precisamos buscar os detalhes do oauth-client separadamente para obter o 'service-provider'
+                        oauth_client_details = make_tfe_request("GET", f"oauth-clients/{oauth_client_id}")
+                        provider_type = oauth_client_details.get("data", {}).get("attributes", {}).get("service-provider", "N/A")
+                    except Exception as e:
+                        print(f"Aviso: Não foi possível obter detalhes do oauth-client {oauth_client_id}: {e}")
+
+                # O identificador do usuário do provedor está em 'service-provider-user'
+                provider_username = token.get("attributes", {}).get("service-provider-user", "N/A")
 
                 print(f"- Tipo: {provider_type}, Identificador: {provider_username}")
         else:
