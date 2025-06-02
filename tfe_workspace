@@ -1,18 +1,21 @@
-import tfe
+import requests
 import os
+import json
 
 # --- Configurações do Terraform Enterprise ---
-TFE_HOSTNAME = "app.terraform.io"  # Ou seu hostname customizado do Terraform Enterprise
+TFE_HOSTNAME = "https://app.terraform.io"  # Ou seu hostname customizado do Terraform Enterprise
 TFE_TOKEN = os.environ.get("TFE_TOKEN") # Recomenda-se usar uma variável de ambiente para o token
+
 ORGANIZATION_NAME = "sua-organizacao" # Substitua pela sua organização
 PROJECT_NAME = "seu-projeto" # Substitua pelo seu projeto (pode ser "default" se não usar projetos)
 
 # --- Configurações do Workspace ---
-WORKSPACE_NAME = "meu-novo-workspace-gitlab" # Nome do workspace a ser criado
+WORKSPACE_NAME = "meu-novo-workspace-gitlab-requests" # Nome do workspace a ser criado
 VCS_IDENTIFIER = "seu-usuario-gitlab" # O nome de usuário do GitLab registrado como VCS Provider no TFE
 GITLAB_REPOSITORY = "seu-usuario-gitlab/seu-repositorio" # Ex: "seu-grupo/seu-projeto"
 DEFAULT_BRANCH = "main" # Ex: "main", "master", etc.
 TERRAFORM_WORKING_DIRECTORY = "terraform" # Ex: "env/dev", "my-app", etc.
+TERRAFORM_VERSION = "1.5.7" # Versão do Terraform para o workspace
 
 # --- Variáveis do Workspace (sensitive = True para variáveis sensíveis) ---
 WORKSPACE_VARIABLES = [
@@ -21,61 +24,145 @@ WORKSPACE_VARIABLES = [
     {"key": "AWS_DEFAULT_REGION", "value": "us-east-1", "category": "env", "sensitive": False, "description": "AWS Default Region"},
 ]
 
-def create_terraform_workspace():
+def make_tfe_request(method, path, data=None):
     """
-    Cria um workspace no Terraform Enterprise, conecta-o a um repositório GitLab
-    e configura as variáveis de ambiente necessárias.
+    Função auxiliar para fazer requisições à API do Terraform Enterprise.
+    """
+    headers = {
+        "Authorization": f"Bearer {TFE_TOKEN}",
+        "Content-Type": "application/vnd.api+json",
+    }
+    url = f"{TFE_HOSTNAME}/api/v2/{path}"
+
+    try:
+        if method == "GET":
+            response = requests.get(url, headers=headers)
+        elif method == "POST":
+            response = requests.post(url, headers=headers, json=data)
+        elif method == "PATCH":
+            response = requests.patch(url, headers=headers, json=data)
+        elif method == "DELETE":
+            response = requests.delete(url, headers=headers)
+        else:
+            raise ValueError(f"Método HTTP '{method}' não suportado.")
+
+        response.raise_for_status() # Lança uma exceção para códigos de status HTTP 4xx/5xx
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na requisição para {url}: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Status Code: {e.response.status_code}")
+            print(f"Response Body: {e.response.text}")
+        raise # Re-lança a exceção para que a função chamadora possa lidar com ela
+
+def create_terraform_workspace_with_requests():
+    """
+    Cria um workspace no Terraform Enterprise usando a biblioteca requests.
     """
     if not TFE_TOKEN:
         print("Erro: A variável de ambiente TFE_TOKEN não está definida. Por favor, defina-a.")
         return
 
     try:
-        # Inicializa o cliente TFE
-        client = tfe.Client(host=TFE_HOSTNAME, token=TFE_TOKEN)
+        # 1. Obter ID da Organização
+        org_response = make_tfe_request("GET", f"organizations/{ORGANIZATION_NAME}")
+        organization_id = org_response["data"]["id"]
+        print(f"Organização '{ORGANIZATION_NAME}' encontrada (ID: {organization_id}).")
 
-        # Busca a organização
-        organization = client.organizations.read(ORGANIZATION_NAME)
-        print(f"Organização '{organization.name}' encontrada.")
-
-        # Busca ou cria o projeto (se o TFE suportar projetos e for necessário)
+        # 2. Obter ID do Projeto (ou criar se não existir)
+        project_id = None
         try:
-            project = client.projects.read(organization_id=organization.id, project_name=PROJECT_NAME)
-            print(f"Projeto '{project.name}' encontrado.")
-        except tfe.exceptions.NotFound:
-            print(f"Projeto '{PROJECT_NAME}' não encontrado. Tentando criar...")
-            project = client.projects.create(organization_id=organization.id, project_name=PROJECT_NAME)
-            print(f"Projeto '{project.name}' criado com sucesso.")
+            # Tentar listar projetos e encontrar pelo nome
+            projects_response = make_tfe_request("GET", f"organizations/{ORGANIZATION_NAME}/projects")
+            for proj_data in projects_response["data"]:
+                if proj_data["attributes"]["name"] == PROJECT_NAME:
+                    project_id = proj_data["id"]
+                    print(f"Projeto '{PROJECT_NAME}' encontrado (ID: {project_id}).")
+                    break
+            if project_id is None:
+                raise requests.exceptions.HTTPError(response=requests.Response()) # Simula NotFound
 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404 or project_id is None: # Se não encontrou o projeto
+                print(f"Projeto '{PROJECT_NAME}' não encontrado. Tentando criar...")
+                project_payload = {
+                    "data": {
+                        "type": "projects",
+                        "attributes": {
+                            "name": PROJECT_NAME
+                        }
+                    }
+                }
+                create_project_response = make_tfe_request("POST", f"organizations/{ORGANIZATION_NAME}/projects", data=project_payload)
+                project_id = create_project_response["data"]["id"]
+                print(f"Projeto '{PROJECT_NAME}' criado com sucesso (ID: {project_id}).")
+            else:
+                raise # Re-lança outros erros HTTP
 
-        # Verifica se o workspace já existe
+        # 3. Obter ID do OAuth Token para o Provedor VCS (GitLab)
+        oauth_tokens_response = make_tfe_request("GET", f"organizations/{organization_id}/oauth-tokens")
+        oauth_token_id = None
+        for token_data in oauth_tokens_response["data"]:
+            if token_data["attributes"]["provider-username"] == VCS_IDENTIFIER and token_data["attributes"]["provider-type"] == "gitlab":
+                oauth_token_id = token_data["id"]
+                print(f"OAuth Token para '{VCS_IDENTIFIER}' encontrado (ID: {oauth_token_id}).")
+                break
+        if not oauth_token_id:
+            raise Exception(f"OAuth Token para o provedor VCS '{VCS_IDENTIFIER}' (GitLab) não encontrado na organização '{ORGANIZATION_NAME}'. Por favor, configure-o no Terraform Enterprise.")
+
+        # 4. Criar ou Atualizar Workspace
+        workspace_id = None
         try:
-            workspace = client.workspaces.read(organization_name=organization.name, workspace_name=WORKSPACE_NAME)
-            print(f"Workspace '{WORKSPACE_NAME}' já existe. Atualizando configurações...")
-        except tfe.exceptions.NotFound:
-            print(f"Workspace '{WORKSPACE_NAME}' não encontrado. Criando novo workspace...")
+            # Tentar ler o workspace para ver se ele já existe
+            workspace_response = make_tfe_request("GET", f"organizations/{ORGANIZATION_NAME}/workspaces/{WORKSPACE_NAME}")
+            workspace_id = workspace_response["data"]["id"]
+            print(f"Workspace '{WORKSPACE_NAME}' já existe (ID: {workspace_id}). Continuando para variáveis...")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"Workspace '{WORKSPACE_NAME}' não encontrado. Criando novo workspace...")
+                workspace_payload = {
+                    "data": {
+                        "attributes": {
+                            "name": WORKSPACE_NAME,
+                            "terraform_version": TERRAFORM_VERSION,
+                            "working-directory": TERRAFORM_WORKING_DIRECTORY,
+                            "vcs-repo": {
+                                "identifier": GITLAB_REPOSITORY,
+                                "oauth-token-id": oauth_token_id,
+                                "branch": DEFAULT_BRANCH,
+                                "default-branch": True,
+                                "ingress-submodules": False
+                            }
+                        },
+                        "relationships": {
+                            "project": {
+                                "data": {
+                                    "type": "projects",
+                                    "id": project_id
+                                }
+                            },
+                            "organization": {
+                                "data": {
+                                    "type": "organizations",
+                                    "id": organization_id
+                                }
+                            }
+                        },
+                        "type": "workspaces"
+                    }
+                }
+                create_workspace_response = make_tfe_request("POST", f"organizations/{organization_id}/workspaces", data=workspace_payload)
+                workspace_id = create_workspace_response["data"]["id"]
+                print(f"Workspace '{WORKSPACE_NAME}' criado com sucesso (ID: {workspace_id}).")
+            else:
+                raise # Re-lança outros erros HTTP
 
-            # Cria o workspace
-            workspace = client.workspaces.create(
-                organization_id=organization.id,
-                name=WORKSPACE_NAME,
-                project_id=project.id,
-                vcs_repo={
-                    "identifier": GITLAB_REPOSITORY,
-                    "oauth_token_id": client.oauth_tokens.list(organization_id=organization.id, provider_id=VCS_IDENTIFIER).data[0].id,
-                    "branch": DEFAULT_BRANCH,
-                    "default_branch": True,
-                    "ingress_submodules": False
-                },
-                working_directory=TERRAFORM_WORKING_DIRECTORY,
-                terraform_version="1.5.7" # Especifique a versão do Terraform
-                # Adicione outras configurações do workspace aqui, se necessário (e.g., auto_apply=True)
-            )
-            print(f"Workspace '{workspace.name}' criado com sucesso (ID: {workspace.id}).")
-
-        # Configura as variáveis do workspace
+        # 5. Configurar Variáveis do Workspace
         print("Configurando variáveis do workspace...")
-        existing_vars = {var.key: var for var in client.vars.list(workspace_id=workspace.id).data}
+        
+        # Obter variáveis existentes para evitar duplicatas ou para atualizá-las
+        existing_vars_response = make_tfe_request("GET", f"workspaces/{workspace_id}/vars")
+        existing_vars = {var["attributes"]["key"]: var for var in existing_vars_response["data"]}
 
         for var_data in WORKSPACE_VARIABLES:
             var_key = var_data["key"]
@@ -84,37 +171,34 @@ def create_terraform_workspace():
             var_sensitive = var_data["sensitive"]
             var_description = var_data.get("description", "")
 
+            var_payload = {
+                "data": {
+                    "type": "vars",
+                    "attributes": {
+                        "key": var_key,
+                        "value": var_value,
+                        "category": var_category,
+                        "sensitive": var_sensitive,
+                        "description": var_description
+                    }
+                }
+            }
+
             if var_key in existing_vars:
                 # Atualiza a variável se ela já existe
                 print(f"Variável '{var_key}' já existe. Atualizando...")
-                client.vars.update(
-                    var_id=existing_vars[var_key].id,
-                    key=var_key,
-                    value=var_value,
-                    category=var_category,
-                    sensitive=var_sensitive,
-                    description=var_description
-                )
+                make_tfe_request("PATCH", f"workspaces/{workspace_id}/vars/{existing_vars[var_key]['id']}", data=var_payload)
             else:
                 # Cria a variável se ela não existe
                 print(f"Criando variável '{var_key}'...")
-                client.vars.create(
-                    workspace_id=workspace.id,
-                    key=var_key,
-                    value=var_value,
-                    category=var_category,
-                    sensitive=var_sensitive,
-                    description=var_description
-                )
+                make_tfe_request("POST", f"workspaces/{workspace_id}/vars", data=var_payload)
         print("Variáveis do workspace configuradas com sucesso.")
 
         print("\nProcesso concluído!")
         print(f"Acesse seu workspace em: {TFE_HOSTNAME}/{ORGANIZATION_NAME}/workspaces/{WORKSPACE_NAME}")
 
-    except tfe.exceptions.TerraformCloudClientError as e:
-        print(f"Erro na API do Terraform Cloud/Enterprise: {e}")
     except Exception as e:
-        print(f"Ocorreu um erro inesperado: {e}")
+        print(f"Ocorreu um erro: {e}")
 
 if __name__ == "__main__":
-    create_terraform_workspace()
+    create_terraform_workspace_with_requests()
