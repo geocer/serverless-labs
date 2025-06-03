@@ -80,3 +80,42 @@ policy_statements = {
     resources = ["*"] # Ou o ARN específico do segredo do Secrets Manager
   }
 }
+
+
+{
+  "containerDefinitions": [
+    {
+      "name": "my-app-container",
+      "image": "your_external_registry_hostname/your_image_name:your_tag",
+      "cpu": 256,
+      "memory": 512,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "repositoryCredentials": {
+        "credentialsParameter": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:your_secret_name_in_secrets_manager"
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/my-app",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "family": "my-app-task-definition",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/your_task_execution_role_name"
+}
+
