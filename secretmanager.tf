@@ -64,3 +64,19 @@ module "secrets_manager_docker_credentials" {
 
 # Certifique-se de que o output de module.ecs_main.task_exec_iam_role_arn
 # é uma lista de strings (ARNs) ou um mapa para que a iteração funcione corretamente.
+
+# Exemplo para MÚLTIPLAS ROLES (se elas forem acessíveis de forma similar)
+policy_statements = {
+  for service_name, service_module in module.ecs_main.module.service :
+  "Allow${title(service_name)}ToReadSecret" => {
+    effect = "Allow"
+    principals = [
+      {
+        type        = "AWS"
+        identifiers = [service_module.aws_iam_role.task_exec[0].arn] # Ajuste se a estrutura for diferente
+      }
+    ]
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["*"] # Ou o ARN específico do segredo do Secrets Manager
+  }
+}
