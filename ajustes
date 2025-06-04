@@ -1,134 +1,74 @@
 locals {
   # ... (restante das locals)
 
-  # Mapeamento para criar serviços ECS Fargate
+  # Adicione a referência ao ARN do Service Discovery Namespace
+  # Se você cria o namespace com um recurso direto (aws_service_discovery_http_namespace.this),
+  # você pode referenciá-lo assim:
+  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn
+  # Se o módulo ECS cria e expõe o namespace, a referência seria diferente,
+  # por exemplo: module.ecs_main.service_discovery_namespace_arn (verifique a output do módulo)
+
+
   ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
-    name = "${local.project_name}-${service_name}-ecs-service"
-    desired_count = service_attrs.desired_count
-    launch_type = "FARGATE"
+    # ... (outros parâmetros do serviço)
 
-    # Extrai o Security Group ID do ALB correspondente para a regra de ingresso
-    load_balancer_sg_id = module.alb[service_name].security_group_id
-
-    # Configurações do Fargate
-    fargate_platform_version = "LATEST"
-    cpu = service_attrs.cpu
-    memory = service_attrs.memory
-
-    # Mapeia as definições dos containers
-    container_definitions = {
-      for container_name, container_def in service_attrs.container_definitions : container_name => {
-        name        = container_name
-        image       = container_def.image
-        essential   = lookup(container_def, "essential", true)
-        cpu         = lookup(container_def, "cpu", null)
-        memory      = lookup(container_def, "memory", null)
-        environment = [for k, v in lookup(container_def, "environment", {}) : {
-          name  = k
-          value = v
-        }]
-        firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
-        log_configuration = lookup(container_def, "log_configuration", null)
-        port_mappings = lookup(container_def, "container_port", null) != null ? [
-          {
-            containerPort = container_def.container_port
-            protocol      = "tcp"
-          }
-        ] : []
-      }
-    }
-
-    # Configuração do Load Balancer para o serviço ECS
-    load_balancer = {
+    # === NOVO BLOCO: service_connect_configuration ===
+    # A foto mostra que o `namespace` é `aws_service_discovery_http_namespace.this.arn`.
+    # Vamos assumir que você tem esse recurso em main.tf, ou o obtém de outro lugar.
+    service_connect_configuration = service_attrs.enable_service_connect ? {
+      namespace = local.service_discovery_namespace_arn # ou module.ecs_main.service_discovery_namespace_arn se o módulo o cria
       service = {
-        # Agora referencia o Target Group que será criado manualmente
-        target_group_arn = aws_lb_target_group.this[service_name].arn
-        container_name   = keys(service_attrs.container_definitions)[0] # Pega o nome do primeiro container
-        container_port   = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
+        # O Terraform espera um mapa onde a chave é o nome do container
+        # e o valor é a configuração do serviço.
+        # Estamos pegando o nome do PRIMEIRO container definido para o serviço.
+        "${keys(service_attrs.container_definitions)[0]}" = { # Key deve ser o nome do container
+          client_alias = [
+            {
+              port     = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port # A porta do container
+              dns_name = lookup(service_attrs, "service_connect_client_alias", keys(service_attrs.container_definitions)[0]) # Usa alias custom ou nome do container
+            }
+          ]
+          port_name     = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port # A porta do container
+          discovery_name = keys(service_attrs.container_definitions)[0] # Nome do container como nome de descoberta
+        }
       }
-    }
+    } : null # Se enable_service_connect for false, o bloco será nulo
+    # ===============================================
 
-    # Subnets privadas para o serviço ECS
-    subnet_ids = local.private_subnet_ids
-
-    # Security Group para o serviço ECS
-    security_group_rules = {
-      ingress_from_alb = {
-        type                     = "ingress"
-        from_port                = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
-        to_port                  = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
-        protocol                 = "tcp"
-        description              = "Allow traffic from ALB"
-        source_security_group_id = module.alb[service_name].security_group_id # Referencia o SG do ALB
-      }
-      egress_all = {
-        type        = "egress"
-        from_port   = 0
-        to_port     = 0
-        protocol    = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-      }
-    }
-
-    # Configurações de deployment (agora dentro da definição de cada serviço)
-    deployment_controller = {
-      type = "ECS"
-    }
-    deployment_minimum_healthy_percent = service_attrs.min_healthy_percent
-    deployment_maximum_percent = service_attrs.max_percent
-
-    tags = {
-      Environment = "Development"
-      Project     = local.project_name
-    }
-
-    # === AJUSTE AQUI PARA AS POLÍTICAS IAM DA TASK ROLE ===
-    # Supondo que você quer MESCLAR com as políticas padrão do módulo ou substituir.
-    # O módulo da foto parece usar "tasks_iam_role_policies" e "tasks_iam_role_statements".
-    #
-    # Vamos considerar que o módulo que você está usando tem os seguintes parâmetros:
-    # 1. `tasks_iam_role_policies`: Um mapa de ARNs de políticas gerenciadas.
-    # 2. `tasks_iam_role_statements`: Uma lista de blocos de statements inline.
-    #
-    # Vamos mesclar suas políticas adicionais em 'tasks_iam_role_policies'.
-    # Usaremos `merge` para combinar um mapa de políticas padrão do módulo
-    # com as políticas adicionais que você fornece.
-    #
-
-    # Exemplo: Se o módulo cria uma política de ReadOnlyAccess por padrão, você a mantém
-    # e adiciona as suas. Ou se você quer total controle, pode remover a padrão daqui
-    # e apenas adicionar as suas.
-
-    tasks_iam_role_policies = merge(
-      # Políticas padrão que o módulo deve criar/anexar (se houver)
-      {
-        "logs_access" = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess" # Exemplo: Acesso a logs para a Task Execution Role
-        # Adicione aqui outras políticas padrão que você queira que TODAS as tasks tenham
-      },
-      # Políticas adicionais vindas do tfvars.auto.json
-      { for i, arn in lookup(service_attrs, "additional_task_role_policy_arns", []) : "custom_policy_${i}" => arn }
-    )
-
-    # Se você também precisar de statements inline, você os definiria aqui.
-    # No entanto, para flexibilidade, usar ARNs de políticas gerenciadas é geralmente melhor.
-    tasks_iam_role_statements = [
-      # Exemplo de statement inline, se necessário
-      # {
-      #   actions   = ["s3:GetObject"]
-      #   resources = ["arn:aws:s3:::my-bucket/*"]
-      # }
-    ]
-
-    # As próximas linhas (tasks_iam_role_name e description)
-    # se aplicam se o módulo as tiver:
-    tasks_iam_role_name = "${local.project_name}-${service_name}-task-role"
-    tasks_iam_role_description = "IAM Task Role for ${local.project_name}-${service_name} ECS service"
-
-    # === FIM DO AJUSTE ===
   }}
-
   # ... (restante das locals)
 }
+
+# variables.tf
+
+variable "ecs_services" {
+  description = "A map of ECS service configurations."
+  type = map(object({
+    # ... (outros campos existentes)
+
+    # NOVO CAMPO PARA SERVICE CONNECT
+    enable_service_connect = optional(bool, false)
+    # Se quiser personalizar o alias, pode adicionar:
+    # service_connect_client_alias = optional(string)
+    # ... (restante da variável)
+  }))
+}
+
+# Também pode precisar de uma variável para o nome do namespace se não for fixo
+variable "service_discovery_namespace_name" {
+  description = "The name of the AWS Service Discovery HTTP Namespace for Service Connect."
+  type        = string
+  default     = "app-namespace" # Ou um nome que você já tenha
+}
+
+# main.tf (Exemplo, se você não tem isso)
+resource "aws_service_discovery_http_namespace" "this" {
+  name        = "${local.project_name}-app-namespace"
+  description = "HTTP namespace for application services"
+}
+
+# Em locals.tf, você o referenciaria como:
+# local.service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn
 
 # main.tf
 
@@ -136,10 +76,21 @@ provider "aws" {
   region = local.aws_region
 }
 
+# --- Adicione a criação do Service Discovery HTTP Namespace se ainda não existe ---
+resource "aws_service_discovery_http_namespace" "this" {
+  name        = "${local.project_name}-${local.service_discovery_namespace_name}"
+  description = "HTTP namespace for ECS Service Connect"
+  tags = {
+    Environment = "Development"
+    Project     = local.project_name
+  }
+}
+# ---------------------------------------------------------------------------------
+
 # Cria o cluster ECS e todos os serviços Fargate dentro dele
 module "ecs_main" {
   source  = "terraform-aws-modules/ecs/aws"
-  version = "5.12.1" # Verifique se esta versão ou uma compatível possui esses parâmetros
+  version = "5.12.1" # Verifique se a sua versão do módulo suporta service_connect_configuration
 
   cluster_name          = local.ecs_cluster_config.cluster_name
   cluster_configuration = local.ecs_cluster_config.cluster_configuration
@@ -163,44 +114,63 @@ module "ecs_main" {
 
       tags                       = service_attrs.tags
 
-      # === ADICIONE ESTES PARÂMETROS ===
       tasks_iam_role_name        = service_attrs.tasks_iam_role_name
       tasks_iam_role_description = service_attrs.tasks_iam_role_description
       tasks_iam_role_policies    = service_attrs.tasks_iam_role_policies
       tasks_iam_role_statements  = service_attrs.tasks_iam_role_statements
-      # ==================================
+
+      # === NOVO PARÂMETRO PARA O MÓDULO ===
+      service_connect_configuration = service_attrs.service_connect_configuration
+      # ====================================
     }
   }
 
   depends_on = [
-    aws_lb_listener.dynamic_listener # Depende do novo recurso de listener dinâmico
+    aws_lb_listener.dynamic_listener,
+    aws_service_discovery_http_namespace.this # Adicionar dependência para o namespace
   ]
 
   tags = local.ecs_cluster_config.tags
 }
 
 # ... (restante do main.tf, inalterado)
-# variables.tf (Sem mudanças)
-variable "ecs_services" {
-  description = "A map of ECS service configurations."
-  type = map(object({
-    # ... (outros campos)
-    additional_task_role_policy_arns = optional(list(string), []) # Esta variável será usada
-  }))
-}
+
+
 {
+  "project_name": "my-org-project",
+  "aws_region": "us-east-1",
+  // ...
+  "service_discovery_namespace_name": "my-app-namespace", // Se você definiu essa nova variável
   "ecs_services": {
     "frontend-app": {
+      "cpu": 1024,
+      "memory": 2048,
+      "container_definitions": {
+        "app": {
+          "image": "public.ecr.aws/ecs-sample-app:latest",
+          "container_port": 80
+        }
+      },
       // ...
-      "additional_task_role_policy_arns": [
-        "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
-        "arn:aws:iam::903837678150:policy/MyCustomECSPolicy"
-      ]
+      "additional_task_role_policy_arns": [],
+      "enable_service_connect": true,  // Habilita o Service Connect
+      "service_connect_client_alias": "frontend" // Opcional: alias personalizado
     },
     "backend-api": {
+      "cpu": 512,
+      "memory": 1024,
+      "container_definitions": {
+        "api": {
+          "image": "my-account-id.dkr.ecr.us-east-1.amazonaws.com/my-backend-api:v1.0",
+          "container_port": 3000
+        }
+      },
       // ...
-      "additional_task_role_policy_arns": []
+      "additional_task_role_policy_arns": [],
+      "enable_service_connect": true,  // Habilita o Service Connect
+      "service_connect_client_alias": "backend" // Opcional: alias personalizado
     }
   }
 }
+
 
