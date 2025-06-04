@@ -1,32 +1,43 @@
-# locals.tf - dentro do loop 'container_definitions'
-# ...
-container_definitions = {
-  for container_name, container_def in service_attrs.container_definitions : container_name => {
-    # ...
-    repository_credentials = lookup(container_def, "repository_credentials", null) != null ? {
-      credentials_parameter = container_def.repository_credentials.credentials_parameter
-    } : null
-    # ...
-  }
-}
-# ...
-
-
 # locals.tf
 
 locals {
-  # ... (suas outras locals, incluindo a definição de service_discovery_namespace_arn)
-  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn # Verifique se esta linha está correta e aws_service_discovery_http_namespace.this existe
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  ecs_cluster_name = var.ecs_cluster_name
+  ecs_log_group_name = "/aws/ecs/${var.ecs_cluster_name}" # Exemplo de como definir o nome do log group
 
+  # Obter o ARN do namespace HTTP Service Discovery criado em main.tf
+  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn # Certifique-se que 'aws_service_discovery_http_namespace.this' existe em main.tf
+
+  # Substitua por suas subnets reais ou obtenha de um módulo VPC
+  # Exemplo: module.vpc.private_subnets_ids ou var.private_subnet_ids
+  private_subnet_ids = var.private_subnet_ids # Exemplo: ["subnet-0abcdef1234567890", "subnet-0fedcba9876543210"]
+
+  # Mapeia as configurações de entrada dos serviços ECS
+  ecs_services_input = var.ecs_services
+
+  # Configurações de cluster (exemplo)
+  ecs_cluster_config = {
+    cluster_name           = local.ecs_cluster_name
+    cluster_configuration  = { execute_command_configuration = { logging = "NONE" } }
+    fargate_capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+    tags = {
+      Environment = "Development"
+      Project     = local.project_name
+    }
+  }
+
+  # Gera as configurações detalhadas para cada serviço ECS a ser passado para o módulo
   ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
     name = "${local.project_name}-${service_name}-ecs-service"
     desired_count = service_attrs.desired_count
     launch_type = "FARGATE"
-    load_balancer_sg_id = module.alb[service_name].security_group_id
+    # load_balancer_sg_id = module.alb[service_name].security_group_id # Remova se não usa módulo ALB com SG específico
     fargate_platform_version = "LATEST"
     cpu = service_attrs.cpu
     memory = service_attrs.memory
 
+    # Definições dos containers dentro do serviço
     container_definitions = {
       for container_name, container_def in service_attrs.container_definitions : container_name => {
         name        = container_name
@@ -39,46 +50,54 @@ locals {
           value = v
         }]
         firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
-        log_configuration = lookup(container_def, "log_configuration", null)
+        log_configuration = lookup(container_def, "log_configuration", {
+          log_driver = "awslogs"
+          options = {
+            "awslogs-group"         = local.ecs_log_group_name
+            "awslogs-region"        = local.aws_region
+            "awslogs-stream-prefix" = container_name
+          }
+        })
         port_mappings = lookup(container_def, "container_port", null) != null ? [
           {
             containerPort = container_def.container_port
             protocol      = "tcp"
           }
         ] : []
-        repository_credentials = lookup(container_def, "repository_credentials", null) != null ? {
-          credentials_parameter = container_def.repository_credentials.credentials_parameter
-        } : null
-        # Adicionar service_connect_client_alias aqui se for definido por container
+        # Corrigindo repositoryCredentials para ser um mapa vazio se não fornecido
+        repository_credentials = try(
+          {
+            credentials_parameter = container_def.repository_credentials.credentials_parameter
+          },
+          {} # Retorna um mapa vazio se container_def.repository_credentials for null ou não tiver credentials_parameter
+        )
+        # Adicionar service_connect_client_alias aqui se for definido por container (da variavel de input)
         service_connect_client_alias = lookup(container_def, "service_connect_client_alias", null)
       }
     }
 
-    load_balancer = {
+    # Configuração do Load Balancer
+    load_balancer = service_attrs.load_balancer_enabled ? { # Adicione uma flag enable_load_balancer no seu input
       service = {
         target_group_arn = aws_lb_target_group.this[service_name].arn
-        # As linhas abaixo estavam usando local.container_name/port, que é errado no escopo global
-        # Precisamos pegar do primeiro container, ou da definição de container.
-        # Se você tiver apenas 1 container por serviço, pode usar:
-        container_name   = keys(service_attrs.container_definitions)[0]
-        container_port   = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
-        # Ou se o load balancer aponta para um container específico por nome, você pode fazer:
-        # container_name   = service_attrs.load_balancer_container_name # se você adicionar isso no input
-        # container_port   = service_attrs.container_definitions[service_attrs.load_balancer_container_name].container_port
+        # Use o nome e a porta do container que o ALB deve rotear (geralmente o primeiro ou um específico)
+        container_name   = lookup(service_attrs, "alb_container_name", keys(service_attrs.container_definitions)[0])
+        container_port   = service_attrs.container_definitions[lookup(service_attrs, "alb_container_name", keys(service_attrs.container_definitions)[0])].container_port
       }
-    }
+    } : null
 
     subnet_ids = local.private_subnet_ids
 
+    # Regras do Security Group (da Task)
     security_group_rules = {
       ingress_from_alb = {
         type                     = "ingress"
-        # Ajuste aqui para pegar a porta do container correto para o ALB
-        from_port                = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
-        to_port                  = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
+        # Use a porta do container que o ALB roteia
+        from_port                = service_attrs.container_definitions[lookup(service_attrs, "alb_container_name", keys(service_attrs.container_definitions)[0])].container_port
+        to_port                  = service_attrs.container_definitions[lookup(service_attrs, "alb_container_name", keys(service_attrs.container_definitions)[0])].container_port
         protocol                 = "tcp"
         description              = "Allow traffic from ALB"
-        source_security_group_id = module.alb[service_name].security_group_id
+        source_security_group_id = module.alb[service_name].security_group_id # Assumindo que module.alb[service_name].security_group_id é o SG do ALB
       }
       egress_all = {
         type        = "egress"
@@ -100,17 +119,18 @@ locals {
       Project     = local.project_name
     }
 
+    # POLÍTICAS DA TASK ROLE (ROLE DA APLICAÇÃO)
     tasks_iam_role_policies = merge(
       {
-        #"logs_access" = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess" # Remova se sua APP não precisa.
+        #"logs_access" = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess" # Remova se a sua APP não precisa de acesso amplo
       },
-      # REMOVA A LINHA ABAIXO QUE CAUSA O ERRO 404 NA TASK ROLE
+      # REMOVA ESTA LINHA POR COMPLETO! ELA CAUSA O ERRO 404 E A CONFUSÃO DE ROLES
       # { "ecs_task" = "arn:aws:iam::aws:policy/AmazonECSTaskExecutionRolePolicy" },
       { for i, arn in lookup(service_attrs, "additional_task_role_policy_arns", []) : "custom_policy_${i}" => arn }
     )
 
     tasks_iam_role_statements = [
-      # ... (seus statements inline)
+      # Seus statements inline aqui, se houver
     ]
 
     tasks_iam_role_name        = "${local.project_name}-${service_name}-task-role"
@@ -120,7 +140,6 @@ locals {
     service_connect_configuration = service_attrs.enable_service_connect ? {
       namespace = local.service_discovery_namespace_arn
       service = {
-        # Itera sobre CADA container definido para este serviço
         for container_name, container_def in service_attrs.container_definitions : container_name => {
           client_alias = [
             {
@@ -136,5 +155,4 @@ locals {
     # ===============================================
 
   }}
-  # ... (restante das locals)
 }
