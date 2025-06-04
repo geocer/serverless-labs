@@ -1,3 +1,45 @@
+
+locals {
+  # ... (restante das locals)
+
+  # Adicione a referência ao ARN do Service Discovery Namespace
+  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn
+  # ... (restante das locals)
+
+
+  ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
+    # ... (outros parâmetros do serviço)
+
+    # Obter o nome do primeiro container para facilitar a referência
+    first_container_name = keys(service_attrs.container_definitions)[0]
+    # Obter a definição do primeiro container
+    first_container_def  = service_attrs.container_definitions[local.first_container_name]
+
+    # === BLOCO CORRIGIDO: service_connect_configuration ===
+    service_connect_configuration = service_attrs.enable_service_connect ? {
+      namespace = local.service_discovery_namespace_arn
+      service = {
+        # A chave DEVE ser o nome do container
+        "${local.first_container_name}" = {
+          client_alias = [
+            {
+              port     = local.first_container_def.container_port # Referencia a porta do container
+              dns_name = lookup(service_attrs, "service_connect_client_alias", local.first_container_name)
+            }
+          ]
+          port_name     = local.first_container_def.container_port # Referencia a porta do container
+          discovery_name = local.first_container_name # Nome do container como nome de descoberta
+        }
+      }
+    } : null # Se enable_service_connect for false, o bloco será nulo
+    # ===============================================
+
+    # ... (restante dos parâmetros do serviço)
+
+  }}
+  # ... (restante das locals)
+}
+
 locals {
   # ... (restante das locals)
 
