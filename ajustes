@@ -1,12 +1,106 @@
+# locals.tf
+
 locals {
-  # ... (restante das locals)
-
-  # Adicione a referência ao ARN do Service Discovery Namespace
-  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn
-
+  # ... (suas outras locals, incluindo a definição de service_discovery_namespace_arn)
+  service_discovery_namespace_arn = aws_service_discovery_http_namespace.this.arn # Verifique se esta linha está correta e aws_service_discovery_http_namespace.this existe
 
   ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
-    # ... (outros parâmetros do serviço)
+    name = "${local.project_name}-${service_name}-ecs-service"
+    desired_count = service_attrs.desired_count
+    launch_type = "FARGATE"
+    load_balancer_sg_id = module.alb[service_name].security_group_id
+    fargate_platform_version = "LATEST"
+    cpu = service_attrs.cpu
+    memory = service_attrs.memory
+
+    container_definitions = {
+      for container_name, container_def in service_attrs.container_definitions : container_name => {
+        name        = container_name
+        image       = container_def.image
+        essential   = lookup(container_def, "essential", true)
+        cpu         = lookup(container_def, "cpu", null)
+        memory      = lookup(container_def, "memory", null)
+        environment = [for k, v in lookup(container_def, "environment", {}) : {
+          name  = k
+          value = v
+        }]
+        firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
+        log_configuration = lookup(container_def, "log_configuration", null)
+        port_mappings = lookup(container_def, "container_port", null) != null ? [
+          {
+            containerPort = container_def.container_port
+            protocol      = "tcp"
+          }
+        ] : []
+        repository_credentials = lookup(container_def, "repository_credentials", null) != null ? {
+          credentials_parameter = container_def.repository_credentials.credentials_parameter
+        } : null
+        # Adicionar service_connect_client_alias aqui se for definido por container
+        service_connect_client_alias = lookup(container_def, "service_connect_client_alias", null)
+      }
+    }
+
+    load_balancer = {
+      service = {
+        target_group_arn = aws_lb_target_group.this[service_name].arn
+        # As linhas abaixo estavam usando local.container_name/port, que é errado no escopo global
+        # Precisamos pegar do primeiro container, ou da definição de container.
+        # Se você tiver apenas 1 container por serviço, pode usar:
+        container_name   = keys(service_attrs.container_definitions)[0]
+        container_port   = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
+        # Ou se o load balancer aponta para um container específico por nome, você pode fazer:
+        # container_name   = service_attrs.load_balancer_container_name # se você adicionar isso no input
+        # container_port   = service_attrs.container_definitions[service_attrs.load_balancer_container_name].container_port
+      }
+    }
+
+    subnet_ids = local.private_subnet_ids
+
+    security_group_rules = {
+      ingress_from_alb = {
+        type                     = "ingress"
+        # Ajuste aqui para pegar a porta do container correto para o ALB
+        from_port                = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
+        to_port                  = service_attrs.container_definitions[keys(service_attrs.container_definitions)[0]].container_port
+        protocol                 = "tcp"
+        description              = "Allow traffic from ALB"
+        source_security_group_id = module.alb[service_name].security_group_id
+      }
+      egress_all = {
+        type        = "egress"
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    }
+
+    deployment_controller = {
+      type = "ECS"
+    }
+    deployment_minimum_healthy_percent = service_attrs.min_healthy_percent
+    deployment_maximum_percent = service_attrs.max_percent
+
+    tags = {
+      Environment = "Development"
+      Project     = local.project_name
+    }
+
+    tasks_iam_role_policies = merge(
+      {
+        #"logs_access" = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess" # Remova se sua APP não precisa.
+      },
+      # REMOVA A LINHA ABAIXO QUE CAUSA O ERRO 404 NA TASK ROLE
+      # { "ecs_task" = "arn:aws:iam::aws:policy/AmazonECSTaskExecutionRolePolicy" },
+      { for i, arn in lookup(service_attrs, "additional_task_role_policy_arns", []) : "custom_policy_${i}" => arn }
+    )
+
+    tasks_iam_role_statements = [
+      # ... (seus statements inline)
+    ]
+
+    tasks_iam_role_name        = "${local.project_name}-${service_name}-task-role"
+    tasks_iam_role_description = "IAM Task Role for ${local.project_name}-${service_name} ECS service"
 
     # === BLOCO CORRIGIDO PARA MULTIPLOS CONTAINERS: service_connect_configuration ===
     service_connect_configuration = service_attrs.enable_service_connect ? {
@@ -17,7 +111,6 @@ locals {
           client_alias = [
             {
               port     = container_def.container_port # A porta do container atual
-              # O alias pode ser o nome do container, ou um alias mais específico se definido
               dns_name = lookup(container_def, "service_connect_client_alias", container_name)
             }
           ]
@@ -28,64 +121,6 @@ locals {
     } : null # Se enable_service_connect for false, o bloco será nulo
     # ===============================================
 
-    # ... (restante dos parâmetros do serviço)
-
   }}
   # ... (restante das locals)
 }
-
-# variables.tf
-variable "ecs_services" {
-  description = "A map of ECS service configurations."
-  type = map(object({
-    cpu = number
-    memory = number
-    container_definitions = map(object({
-      image = string
-      container_port = optional(number)
-      essential = optional(bool, true)
-      cpu = optional(number)
-      memory = optional(number)
-      environment = optional(map(string), {})
-      firelens_configuration = optional(map(string), {})
-      log_configuration = optional(any, null)
-      # NOVO CAMPO AQUI: service_connect_client_alias para cada container
-      service_connect_client_alias = optional(string)
-    }))
-    health_check_path = string
-    health_check_port = string
-    desired_count = number
-    min_healthy_percent = number
-    max_percent = number
-    alb_listener_port = number
-    alb_protocol = string
-    alb_host_header = string
-    additional_task_role_policy_arns = optional(list(string), [])
-    enable_service_connect = optional(bool, false) # Este já estava lá no nível do serviço
-  }))
-}
-
-{
-  "ecs_services": {
-    "my-multi-container-app": {
-      "cpu": 1024,
-      "memory": 2048,
-      "container_definitions": {
-        "web-app": {
-          "image": "my-web-app:latest",
-          "container_port": 80,
-          "service_connect_client_alias": "webapp-alias" # Alias para este container
-        },
-        "sidecar-service": {
-          "image": "my-sidecar:latest",
-          "container_port": 5000,
-          "essential": false,
-          "service_connect_client_alias": "sidecar-alias" # Alias para este container
-        }
-      },
-      // ... outros campos
-      "enable_service_connect": true
-    }
-  }
-}
-
