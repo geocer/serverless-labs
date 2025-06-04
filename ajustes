@@ -1,3 +1,17 @@
+# locals.tf - dentro do loop 'container_definitions'
+# ...
+container_definitions = {
+  for container_name, container_def in service_attrs.container_definitions : container_name => {
+    # ...
+    repository_credentials = lookup(container_def, "repository_credentials", null) != null ? {
+      credentials_parameter = container_def.repository_credentials.credentials_parameter
+    } : null
+    # ...
+  }
+}
+# ...
+
+
 # locals.tf
 
 locals {
