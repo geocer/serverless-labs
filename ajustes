@@ -20,10 +20,13 @@ container_definitions = {
       }
     ] : []
 
-    # Ajuste aqui para incluir repository_credentials SOMENTE se credentials_parameter existir
-    repository_credentials = lookup(container_def, "repository_credentials", null) != null && lookup(container_def.repository_credentials, "credentials_parameter", null) != null ?
-      {
-        credentials_parameter = container_def.repository_credentials.credentials_parameter
-      } : null # Retorna null para omitir o bloco inteiro se não houver um valor
+    # ESTE É O AJUSTE CRÍTICO:
+    # Inclui repository_credentials SOMENTE se credentials_parameter existir e não for nulo
+    repository_credentials = (
+      lookup(container_def, "repository_credentials", null) != null &&
+      lookup(container_def.repository_credentials, "credentials_parameter", null) != null
+    ) ? {
+      credentials_parameter = container_def.repository_credentials.credentials_parameter
+    } : null # Retorna null para omitir o bloco inteiro
   }
 }
