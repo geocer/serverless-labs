@@ -1,9 +1,40 @@
-# outputs.tf
+    service_connect_configuration = service_attrs.enable_service_connect ? {
+      namespace = local.service_discovery_namespace_arn
+      service = {
+        # ESTE 'FOR' É CRÍTICO para iterar sobre CADA container
+        for container_name, container_def in service_attrs.container_definitions : container_name => {
+          client_alias = [
+            {
+              port     = container_def.container_port # A porta do container atual (CORRIGIDO)
+              dns_name = lookup(container_def, "service_connect_client_alias", container_name)
+            }
+          ]
+          port_name     = container_def.container_port # A porta do container atual (CORRIGIDO)
+          discovery_name = container_name # O nome do container como nome de descoberta (CORRIGIDO)
+        }
+      }
+    } : null #
 
-output "debug_processed_container_definitions" {
-  description = "Debug output for processed container_definitions sent to ECS module/resource."
-  value = {
-    for service_name, service_config in local.ecs_service_configs :
-    service_name => service_config.container_definitions # Ou local.services_without_service_connect[service_name].container_definitions
-  }
-}
+
+    service_connect_configuration = service_attrs.enable_service_connect ? {
+      namespace = local.service_discovery_namespace_arn
+      service = flatten([
+        for container_name, container_def in service_attrs.container_definitions : (
+          lookup(container_def, "container_port", null) != null ?
+          [ # Retorna uma lista de 1 elemento se a condição for atendida
+            {
+              port_name      = tostring(container_def.container_port)
+              discovery_name = container_name
+              client_alias = [
+                {
+                  port     = container_def.container_port
+                  dns_name = lookup(container_def, "service_connect_client_alias", container_name)
+                }
+              ]
+            }
+          ] : [] # Retorna uma lista vazia se a condição NÃO for atendida
+        )
+      ])
+    } : null
+
+service_connect_configuration = service_attrs.service_connect_configuration
