@@ -1,32 +1,9 @@
-# locals.tf - dentro de ecs_service_configs.container_definitions
+# outputs.tf
 
-container_definitions = {
-  for container_name, container_def in service_attrs.container_definitions : container_name => {
-    name        = container_name
-    image       = container_def.image
-    essential   = lookup(container_def, "essential", true)
-    cpu         = lookup(container_def, "cpu", null)
-    memory      = lookup(container_def, "memory", null)
-    environment = [for k, v in lookup(container_def, "environment", {}) : {
-      name  = k
-      value = v
-    }]
-    firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
-    log_configuration = lookup(container_def, "log_configuration", null)
-    port_mappings = lookup(container_def, "container_port", null) != null ? [
-      {
-        containerPort = container_def.container_port
-        protocol      = "tcp"
-      }
-    ] : []
-
-    # ESTE É O AJUSTE CRÍTICO:
-    # Inclui repository_credentials SOMENTE se credentials_parameter existir e não for nulo
-    repository_credentials = (
-      lookup(container_def, "repository_credentials", null) != null &&
-      lookup(container_def.repository_credentials, "credentials_parameter", null) != null
-    ) ? {
-      credentials_parameter = container_def.repository_credentials.credentials_parameter
-    } : null # Retorna null para omitir o bloco inteiro
+output "debug_processed_container_definitions" {
+  description = "Debug output for processed container_definitions sent to ECS module/resource."
+  value = {
+    for service_name, service_config in local.ecs_service_configs :
+    service_name => service_config.container_definitions # Ou local.services_without_service_connect[service_name].container_definitions
   }
 }
