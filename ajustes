@@ -23,3 +23,68 @@ output "debug_service_connect_configurations" {
     service_name => service_config.service_connect_configuration
   }
 }
+
+#locals.tf
+locals {
+  # ... (resto do seu código locals.tf)
+
+  ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
+    # ... (outras configurações de serviço)
+
+    container_definitions = {
+      for container_name, container_def in service_attrs.container_definitions : container_name => {
+        name        = container_name
+        image       = container_def.image
+        essential   = lookup(container_def, "essential", true)
+        cpu         = lookup(container_def, "cpu", null)
+        memory      = lookup(container_def, "memory", null)
+        environment = [for k, v in lookup(container_def, "environment", {}) : {
+          name  = k
+          value = v
+        }]
+        firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
+        log_configuration = lookup(container_def, "log_configuration", null)
+        
+        # ***** ALTERAÇÃO AQUI: Adicionar 'name' ao port_mappings *****
+        port_mappings = lookup(container_def, "container_port", null) != null ? [
+          {
+            containerPort = container_def.container_port
+            protocol      = "tcp"
+            # Adicione um 'name' para o mapeamento de porta.
+            # O nome deve ser o que você quer referenciar em service_connect_configuration.service.port_name
+            # Uma boa prática é usar o próprio container_port ou um nome descritivo.
+            # Se o erro diz "portName(8080) does not refer to any named PortMapping", significa que ele esperava o nome "8080"
+            name          = tostring(container_def.container_port) # Usar a porta como o nome
+          }
+        ] : []
+        # ************************************************************
+
+        repository_credentials = try(
+          {
+            credentials_parameter = container_def.repository_credentials.credentials_parameter
+          },
+          {}
+        )
+      }
+    }
+
+    # ... (resto do seu código locals.tf, incluindo service_connect_configuration)
+    service_connect_configuration = service_attrs.enable_service_connect ? (
+      {
+        namespace = local.service_discovery_namespace_arn
+        service   = {
+          # Este port_name deve corresponder ao 'name' que você acabou de adicionar ao port_mappings
+          port_name      = tostring(values(service_attrs.container_definitions)[0].container_port)
+          discovery_name = keys(service_attrs.container_definitions)[0]
+          client_alias = {
+            port     = values(service_attrs.container_definitions)[0].container_port
+            dns_name = keys(service_attrs.container_definitions)[0]
+          }
+        }
+      }
+    ) : null
+    # ... (fim do bloco service_connect_configuration)
+
+  }}
+  # ... (resto do seu código locals.tf)
+}
