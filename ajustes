@@ -38,3 +38,13 @@
     } : null
 
 service_connect_configuration = service_attrs.service_connect_configuration
+
+# outputs.tf
+
+output "debug_service_connect_configurations" {
+  description = "Debug output for service_connect_configuration of each ECS service."
+  value       = { # <--- This is where the '=' must be
+    for service_name, service_config in local.ecs_service_configs :
+    service_name => service_config.service_connect_configuration
+  }
+}
