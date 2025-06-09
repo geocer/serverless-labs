@@ -1,0 +1,313 @@
+# main.tf (ou um arquivo de módulo 'storage')
+
+# 1. Recurso AWS EFS File System
+resource "aws_efs_file_system" "app_data" {
+  creation_token = "${local.project_name}-app-data" # Token único para identificação
+  performance_mode = "generalPurpose"
+  throughput_mode  = "bursting" # Ou "provisioned" se precisar de throughput garantido
+
+  tags = {
+    Name        = "${local.project_name}-app-data-efs"
+    Environment = "Development"
+    Project     = local.project_name
+  }
+}
+
+# 2. EFS Mount Targets (um para cada subnet privada onde o Fargate irá rodar)
+resource "aws_efs_mount_target" "app_data" {
+  for_each          = toset(var.private_subnet_ids) # Itera sobre suas subnets privadas
+  file_system_id    = aws_efs_file_system.app_data.id
+  subnet_id         = each.value
+  security_groups   = [aws_security_group.efs_access.id] # SG que permite acesso ao EFS
+}
+
+# 3. Security Group para EFS (permite acesso NFS na porta 2049)
+resource "aws_security_group" "efs_access" {
+  name        = "${local.project_name}-efs-access-sg"
+  description = "Allow NFS traffic to EFS from ECS Fargate tasks"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "Allow NFS from ECS Fargate tasks"
+    from_port   = 2049 # Porta padrão NFS
+    to_port     = 2049
+    protocol    = "tcp"
+    # A origem deve ser o Security Group das tasks Fargate
+    security_groups = [aws_security_group.ecs_fargate_tasks.id] # Referencia o SG da task (criado pelo módulo ECS ou manualmente)
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${local.project_name}-efs-access-sg"
+    Environment = "Development"
+    Project     = local.project_name
+  }
+}
+
+# 4. EFS Access Point (Recomendado para Fargate)
+resource "aws_efs_access_point" "app_data_access_point" {
+  file_system_id = aws_efs_file_system.app_data.id
+  # O ID da conta é necessário para o ARN, use data.aws_caller_identity.current.account_id
+  # O caminho raiz (root_directory) e o ID do usuário/grupo (posix_user) são importantes para o Fargate.
+  # Fargate geralmente monta o volume com o UID/GID do usuário especificado aqui.
+  root_directory {
+    path = "/app_data" # O caminho dentro do EFS que este Access Point expõe
+  }
+  posix_user {
+    uid = 1000 # UID que o container vai usar para acessar o volume
+    gid = 1000 # GID que o container vai usar para acessar o volume
+  }
+
+  tags = {
+    Name        = "${local.project_name}-app-data-ap"
+    Environment = "Development"
+    Project     = local.project_name
+  }
+}
+
+# Data source para obter o Security Group da Task criado pelo módulo ECS
+# Isso é necessário para referenciar o SG da Task no SG do EFS
+data "aws_security_group" "ecs_fargate_tasks" {
+  name = "${local.project_name}-ecs-fargate-task-sg" # O nome padrão do SG da task pelo módulo ECS
+  vpc_id = var.vpc_id
+}
+
+# locals.tf
+
+locals {
+  # ... (suas outras locals)
+
+  ecs_service_configs = { for service_name, service_attrs in local.ecs_services_input : service_name => {
+    name = "${local.project_name}-${service_name}-ecs-service"
+    desired_count = service_attrs.desired_count
+    launch_type = "FARGATE"
+    fargate_platform_version = "LATEST"
+    cpu = service_attrs.cpu
+    memory = service_attrs.memory
+
+    container_definitions = {
+      for container_name, container_def in service_attrs.container_definitions : container_name => {
+        name        = container_name
+        image       = container_def.image
+        essential   = lookup(container_def, "essential", true)
+        cpu         = lookup(container_def, "cpu", null)
+        memory      = lookup(container_def, "memory", null)
+        environment = [for k, v in lookup(container_def, "environment", {}) : {
+          name  = k
+          value = v
+        }]
+        firelens_configuration = merge({}, lookup(container_def, "firelens_configuration", {}))
+        log_configuration = lookup(container_def, "log_configuration", {
+          log_driver = "awslogs"
+          options = {
+            "awslogs-group"         = local.ecs_log_group_name
+            "awslogs-region"        = local.aws_region
+            "awslogs-stream-prefix" = container_name
+          }
+        })
+        port_mappings = lookup(container_def, "container_port", null) != null ? [
+          {
+            containerPort = container_def.container_port
+            protocol      = "tcp"
+          }
+        ] : []
+        repository_credentials = try(
+          {
+            credentials_parameter = container_def.repository_credentials.credentials_parameter
+          },
+          {}
+        )
+        service_connect_client_alias = lookup(container_def, "service_connect_client_alias", null)
+        secrets = [
+          for secret_name, secret_attrs in lookup(container_def, "secrets", {}) : {
+            name      = secret_name
+            value_from = secret_attrs.value_from
+          }
+        ]
+        # === NOVOS PARÂMETROS PARA VOLUME EFS AQUI ===
+        mount_points = lookup(container_def, "mount_points", null) != null ? [
+          {
+            sourceVolume  = container_def.mount_points.source_volume_name # Nome do volume que será montado
+            containerPath = container_def.mount_points.container_path    # Caminho dentro do container
+            readOnly      = lookup(container_def.mount_points, "read_only", false)
+          }
+        ] : []
+        # ============================================
+      }
+    }
+
+    # ... (restante do seu locals.tf)
+
+    # === Definição dos volumes para o serviço ECS ===
+    # Esta seção 'volumes' é adicionada ao nível do serviço, não do container individual.
+    volumes = service_attrs.enable_efs ? [
+      {
+        name = "app-data-volume" # O nome do volume, referenciado em mount_points
+        efs_volume_configuration = {
+          file_system_id        = aws_efs_file_system.app_data.id
+          # Se você usar Access Points, referencie o ID do Access Point aqui
+          # Recomendado para Fargate
+          authorization_config = {
+            access_point_id = aws_efs_access_point.app_data_access_point.id
+            iam             = "ENABLED" # Habilita o IAM para autorização do EFS
+          }
+          transit_encryption    = "ENABLED" # Recomendado para segurança
+          # Se usar Fargate sem Access Points e com Root Directory, defina o path aqui
+          # root_directory      = "/"
+        }
+      }
+    ] : [] # Se enable_efs for false, não haverá volumes EFS
+    # ===============================================
+
+  }}
+}
+
+# variables.tf
+
+# ... (suas variáveis existentes)
+
+variable "ecs_services" {
+  description = "A map of ECS service configurations."
+  type = map(object({
+    cpu = number
+    memory = number
+    container_definitions = map(object({
+      image = string
+      container_port = optional(number)
+      essential = optional(bool, true)
+      cpu = optional(number)
+      memory = optional(number)
+      environment = optional(map(string), {})
+      firelens_configuration = optional(map(string), {})
+      log_configuration = optional(any, null)
+      repository_credentials = optional(object({
+        credentials_parameter = string
+      }), null)
+      service_connect_client_alias = optional(string)
+      secrets = optional(map(object({
+        value_from = string
+      })), {})
+      # === NOVO ATRIBUTO PARA EFS mount_points ===
+      mount_points = optional(object({
+        source_volume_name = string # Nome do volume definido no nível do serviço
+        container_path     = string # Caminho dentro do container (ex: "/mnt/data")
+        read_only          = optional(bool, false)
+      }), null)
+      # ========================================
+    }))
+    health_check_path = optional(string, "/")
+    health_check_port = optional(string, "traffic-port")
+    desired_count = number
+    min_healthy_percent = number
+    max_percent = number
+    load_balancer_enabled = optional(bool, false)
+    alb_container_name = optional(string)
+    alb_listener_port = optional(number)
+    alb_protocol = optional(string)
+    alb_host_header = optional(string)
+    additional_task_role_policy_arns = optional(list(string), [])
+    enable_service_connect = optional(bool, false)
+    # === NOVA FLAG PARA EFS ===
+    enable_efs = optional(bool, false)
+    # ========================
+  }))
+}
+
+# main.tf - dentro do module "ecs_main" no services -> tasks_iam_role_statements
+
+module "ecs_main" {
+  # ...
+  services = { for service_name, service_attrs in local.ecs_service_configs : service_name => {
+      # ...
+      tasks_iam_role_statements  = concat(
+        service_attrs.tasks_iam_role_statements, # Statements já existentes
+        # ADICIONAR PERMISSÕES PARA EFS
+        [
+          # Se usar EFS Access Points com IAM enabled
+          {
+            effect = "Allow"
+            actions = [
+              "elasticfilesystem:ClientMount",
+              "elasticfilesystem:ClientWrite", # Apenas se for escrita
+              "elasticfilesystem:ClientRootAccess", # Necessário se o root_directory não for "/"
+              "elasticfilesystem:DescribeMountTargets",
+              "elasticfilesystem:DescribeFileSystems"
+            ]
+            resources = [
+              aws_efs_access_point.app_data_access_point.arn, # ARN do Access Point
+              aws_efs_file_system.app_data.arn # ARN do File System
+            ]
+            # Condição para garantir que o acesso é via Access Point e o File System correto
+            condition = {
+              "StringEquals" = {
+                "elasticfilesystem:AccessPointArn" = aws_efs_access_point.app_data_access_point.arn
+              }
+              "StringLike" = {
+                "elasticfilesystem:FileSystemArn" = aws_efs_file_system.app_data.arn
+              }
+            }
+          }
+          # Se não usar Access Points com IAM enabled, apenas ClientMount e ClientWrite no File System
+          # {
+          #   effect = "Allow"
+          #   actions = [
+          #     "elasticfilesystem:ClientMount",
+          #     "elasticfilesystem:ClientWrite"
+          #   ]
+          #   resources = [aws_efs_file_system.app_data.arn]
+          # }
+        ]
+      )
+      # ...
+    }
+  }
+  # ...
+}
+
+{
+    "project_name": "welabs",
+    "aws_region": "us-east-1",
+    "vpc_id": "vpc-048f3601486ea8b98",
+    "private_subnet_ids": ["subnet-02abb6763844b8e95", "subnet-08c358fbaead584f8"],
+    "public_subnet_ids": ["subnet-02abb6763844b8e95", "subnet-08c358fbaead584f8"],
+    "ecs_cluster_name": "ecs-cluster",
+    "ecs_log_group_name": "/aws/ecs/ecs-cluster",
+    "service_discovery_namespace_name": "namespace-app",
+    "ecs_services": {
+        "backend-data-processor": { # Novo serviço que usa EFS
+            "cpu": 1024,
+            "memory": 2048,
+            "container_definitions": {
+              "processor": {
+                "image": "903837678150.dkr.ecr.us-east-1.amazonaws.com/data-processor:latest",
+                "essential": true,
+                "environment": {},
+                "secrets": {},
+                "mount_points": { # <--- Configuração do ponto de montagem
+                    "source_volume_name": "app-data-volume", # Deve corresponder ao 'name' do volume definido no locals.tf
+                    "container_path": "/app/data",           # Caminho dentro do container
+                    "read_only": false                       # true para somente leitura
+                }
+              }
+            },
+            "health_check_path": "/",
+            "health_check_port": "traffic-port",
+            "desired_count": 1,
+            "min_healthy_percent": 100,
+            "max_percent": 400,
+            "load_balancer_enabled": false, # Backend sem ingress direto
+            "enable_service_connect": true, # Se precisar se comunicar com outros serviços ECS
+            "enable_efs": true              # <--- Habilita EFS para este serviço
+          },
+          "backend-api": {
+            # ... (seu serviço API existente, sem EFS)
+          }
+        }
+   }
+}
