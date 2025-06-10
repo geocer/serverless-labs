@@ -28,3 +28,27 @@ aws secretsmanager create-secret \
     --region us-east-1
 
 
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "secretsmanager:GetSecretValue",
+            "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:TerraformCloudToken-UNIQUEID"
+        }
+    ]
+}
+
+
+# Certifique-se de que jq esteja instalado no CloudShell (geralmente está, mas se não, instale-o com 'sudo yum install jq -y' ou 'sudo apt-get install jq -y')
+
+# Comando para obter o token e exportá-lo diretamente para a variável TFC_TOKEN
+export TFC_TOKEN=$(aws secretsmanager get-secret-value --secret-id TerraformCloudToken --query SecretString --output text | jq -r '."terraform_cloud_token"')
+
+# Você pode adicionar uma mensagem para confirmar que a variável foi carregada, SEM imprimir o token
+echo "Terraform Cloud token carregado na variável TFC_TOKEN."
+
+# Para verificar se a variável foi carregada (NÃO FAÇA ISSO EM AMBIENTES DE PRODUÇÃO OU PARA USUÁRIOS FINAIS):
+# echo $TFC_TOKEN
+
+
