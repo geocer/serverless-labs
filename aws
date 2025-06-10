@@ -20,3 +20,11 @@ aws cloudtrail lookup-events \
     --lookup-attributes AttributeKey=ResourceName,AttributeValue="arn:aws:wafv2::global/webacl/teste*" \
     --query 'Events[?EventName==`CreateWebACL`].{EventTime: EventTime, Username: Username, EventSource: EventSource, EventId: EventId}' \
     --output table
+
+aws secretsmanager create-secret \
+    --name TerraformCloudToken \
+    --description "Terraform Cloud API Token" \
+    --secret-string '{"terraform_cloud_token": "tfc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}' \
+    --region us-east-1
+
+
