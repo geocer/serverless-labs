@@ -70,6 +70,55 @@ def get_aws_resource(service_name, region_name='sa-east-1',
         logging.error(f"Erro ao obter recurso para {service_name}: {e}")
         raise
 
+def update_security_group_rules(sg_id, vpc_id, target_cidr, port, protocol, direction, region,
+                                aws_access_key_id, aws_secret_access_key, aws_session_token):
+    """
+    Adiciona uma regra de Security Group (inbound ou outbound) se ela não existir.
+    """
+    ec2_client = get_aws_client('ec2', region, aws_access_key_id, aws_secret_access_key, aws_session_token)
+    
+    logging.info(f"Verificando e adicionando regra {direction} para SG '{sg_id}' na porta {port} do CIDR '{target_cidr}'.")
+
+    try:
+        response = ec2_client.describe_security_groups(GroupIds=[sg_id])
+        sg = response['SecurityGroups'][0]
+        
+        ip_permissions = sg['IpPermissions'] if direction == 'inbound' else sg['IpPermissionsEgress']
+        
+        rule_exists = False
+        for perm in ip_permissions:
+            if perm.get('FromPort') == port and perm.get('ToPort') == port and perm.get('IpProtocol') == protocol:
+                for ip_range in perm.get('IpRanges', []):
+                    if ip_range.get('CidrIp') == target_cidr:
+                        rule_exists = True
+                        break
+            if rule_exists:
+                break
+        
+        if rule_exists:
+            logging.info(f"Regra {direction} (Porta {port}/{protocol} de/para {target_cidr}) já existe no SG '{sg_id}'.")
+            return True
+        
+        # Adicionar a regra
+        ip_permission_config = [{
+            'IpProtocol': protocol,
+            'FromPort': port,
+            'ToPort': port,
+            'IpRanges': [{'CidrIp': target_cidr}]
+        }]
+
+        if direction == 'inbound':
+            ec2_client.authorize_security_group_ingress(GroupId=sg_id, IpPermissions=ip_permission_config)
+            logging.info(f"Regra de Inbound (Porta {port}/{protocol} de {target_cidr}) adicionada ao SG '{sg_id}'.")
+        elif direction == 'outbound':
+            ec2_client.authorize_security_group_egress(GroupId=sg_id, IpPermissions=ip_permission_config)
+            logging.info(f"Regra de Outbound (Porta {port}/{protocol} para {target_cidr}) adicionada ao SG '{sg_id}'.")
+        
+        return True
+    except Exception as e:
+        logging.error(f"Erro ao adicionar regra {direction} ao Security Group '{sg_id}': {e}")
+        return False
+
 def create_vpc_endpoints(service_names, vpc_id, subnet_ids, security_group_ids, region,
                          aws_access_key_id, aws_secret_access_key, aws_session_token):
     """
@@ -663,6 +712,25 @@ def main():
         )
     else:
         logging.warning(f"Nenhuma subnet existente encontrada no CIDR '{args.main_vpc_cidr}' para associação à RT do TGW.")
+
+    # NOVO REQUISITO: Adicionar regras de Security Group para o VPC Endpoint
+    logging.info(f"Adicionando regras de Security Group (inbound/outbound) para VPC Endpoints na rede {args.non_routable_cidr} na porta 443.")
+    for sg_id in args.security_group_ids:
+        # Regra de Inbound (para permitir que o 100.99.0.0/16 se conecte ao endpoint)
+        success_inbound = update_security_group_rules(
+            sg_id, args.vpc_id, args.non_routable_cidr, 443, 'tcp', 'inbound', args.region,
+            aws_access_key_id, aws_secret_access_key, aws_session_token
+        )
+        if not success_inbound:
+            logging.error(f"Falha ao adicionar regra de inbound para SG '{sg_id}'. Pode afetar a conectividade do VPC Endpoint.")
+
+        # Regra de Outbound (para permitir que o endpoint responda ao 100.99.0.0/16)
+        success_outbound = update_security_group_rules(
+            sg_id, args.vpc_id, args.non_routable_cidr, 443, 'tcp', 'outbound', args.region,
+            aws_access_key_id, aws_secret_access_key, aws_session_token
+        )
+        if not success_outbound:
+            logging.error(f"Falha ao adicionar regra de outbound para SG '{sg_id}'. Pode afetar a conectividade do VPC Endpoint.")
 
     # 7. Criar VPC Endpoints (nas novas subnets do 100.99.0.0/16)
     logging.info("Passo 7: Criando VPC Endpoints nas subnets 'app-non-routable-1a' e 'app-non-routable-1b' e Gateway Endpoints.")
