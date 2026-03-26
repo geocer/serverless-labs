@@ -136,7 +136,7 @@ def list_fields_in_form(parent_element):
 if __name__ == "__main__":
     # URL de exemplo
     target_url = "https://login.microsoftonline.com/"
-
+    ls-RiQILiBi-Qara-1569-2666-RavETuqI05f2
     # --- Configurações do Proxy (SUBSTITUA PELAS SUAS INFORMAÇÕES) ---
     # EXEMPLO: Se você tem um proxy em "10.0.0.1" na porta "8888"
     my_proxy_address = "IP_DO_SEU_PROXY"  # Ex: "10.0.0.1" ou "proxy.example.com"
