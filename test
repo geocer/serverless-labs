@@ -1,0 +1,4 @@
+curl -i -X OPTIONS \
+  'https://vpce-029331b95c05e76d3-ayedknug.execute-api.sa-east-1.vpce.amazonaws.com/prod/mrs' \
+  -H 'Origin: https://web-s3.latam-infra-shared-services.aws.fisv.cloud' \
+  -H 'Access-Control-Request-Method: GET'
