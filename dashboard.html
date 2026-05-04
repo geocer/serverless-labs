@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MR Bot · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --orange: #DE5B14;
+    --orange-dark: #B8470F;
+    --orange-soft: #FFF1E8;
+    --bg: #F7F8FA;
+    --panel: #FFFFFF;
+    --border: #E4E6EA;
+    --text: #1B1F26;
+    --text-muted: #5C6470;
+    --text-subtle: #8C95A1;
+    --green: #2E7D5B;
+    --green-soft: #E3F4EB;
+    --red: #C63838;
+    --red-soft: #FBE7E7;
+    --amber: #B5751F;
+    --amber-soft: #FFF1D6;
+    --blue: #2563A8;
+    --blue-soft: #E4EEFA;
+    --shadow-sm: 0 1px 2px rgba(15, 22, 36, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 22, 36, 0.06), 0 1px 3px rgba(15, 22, 36, 0.04);
+  }
+
+- { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+font-family: ‘Inter’, -apple-system, sans-serif;
+background: var(–bg);
+color: var(–text);
+font-size: 14px;
+line-height: 1.5;
+overflow-x: hidden;
+}
+
+/* ============ HEADER ============ */
+.topbar {
+background: linear-gradient(180deg, var(–orange) 0%, var(–orange-dark) 100%);
+color: white;
+padding: 0 24px;
+height: 48px;
+display: flex;
+align-items: center;
+gap: 28px;
+position: sticky;
+top: 0;
+z-index: 50;
+box-shadow: 0 1px 0 rgba(0,0,0,0.08);
+}
+
+.brand {
+display: flex;
+align-items: center;
+gap: 10px;
+font-weight: 700;
+letter-spacing: -0.01em;
+}
+
+.brand-mark {
+width: 28px;
+height: 28px;
+background: white;
+color: var(–orange);
+border-radius: 6px;
+display: grid;
+place-items: center;
+font-family: ‘Fraunces’, serif;
+font-weight: 700;
+font-size: 16px;
+}
+
+.nav {
+display: flex;
+gap: 4px;
+flex: 1;
+}
+
+.nav a {
+color: rgba(255,255,255,0.92);
+text-decoration: none;
+font-size: 13.5px;
+font-weight: 500;
+padding: 6px 12px;
+border-radius: 4px;
+transition: background 0.15s;
+}
+
+.nav a:hover { background: rgba(255,255,255,0.12); }
+.nav a.active { background: rgba(0,0,0,0.18); }
+
+.topbar-actions {
+display: flex;
+align-items: center;
+gap: 12px;
+font-size: 13px;
+}
+
+.btn-refresh {
+background: rgba(255,255,255,0.15);
+color: white;
+border: 1px solid rgba(255,255,255,0.2);
+padding: 5px 12px;
+border-radius: 4px;
+font-size: 12.5px;
+font-weight: 500;
+cursor: pointer;
+display: flex;
+align-items: center;
+gap: 6px;
+transition: background 0.15s;
+}
+.btn-refresh:hover { background: rgba(255,255,255,0.25); }
+.btn-refresh:disabled { opacity: 0.6; cursor: wait; }
+
+.avatar {
+width: 28px; height: 28px;
+border-radius: 50%;
+background: rgba(255,255,255,0.25);
+display: grid; place-items: center;
+font-weight: 600; font-size: 12px;
+}
+
+/* ============ LAYOUT ============ */
+.shell {
+display: grid;
+grid-template-columns: 240px 1fr 360px;
+min-height: calc(100vh - 48px);
+}
+
+/* ============ SIDEBAR ============ */
+.sidebar {
+background: var(–panel);
+border-right: 1px solid var(–border);
+padding: 20px 0;
+overflow-y: auto;
+}
+
+.project-header {
+padding: 0 20px 16px;
+border-bottom: 1px solid var(–border);
+margin-bottom: 12px;
+display: flex;
+align-items: center;
+gap: 10px;
+}
+
+.project-icon {
+width: 32px; height: 32px;
+border-radius: 6px;
+background: linear-gradient(135deg, var(–orange) 0%, #F4A261 100%);
+display: grid; place-items: center;
+color: white;
+font-weight: 700;
+font-size: 14px;
+flex-shrink: 0;
+}
+
+.project-info { min-width: 0; }
+.project-name {
+font-weight: 600;
+font-size: 13.5px;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+.project-sub {
+color: var(–text-subtle);
+font-size: 11.5px;
+text-transform: uppercase;
+letter-spacing: 0.04em;
+}
+
+.nav-group { padding: 4px 0 12px; }
+.nav-group-label {
+padding: 8px 20px 6px;
+font-size: 10.5px;
+text-transform: uppercase;
+letter-spacing: 0.06em;
+color: var(–text-subtle);
+font-weight: 600;
+}
+
+.nav-item {
+padding: 7px 20px;
+display: flex;
+align-items: center;
+gap: 11px;
+cursor: pointer;
+color: var(–text-muted);
+font-size: 13.5px;
+border-left: 3px solid transparent;
+user-select: none;
+transition: background 0.1s;
+}
+
+.nav-item:hover { background: #F2F3F5; color: var(–text); }
+.nav-item.active {
+background: var(–orange-soft);
+color: var(–orange-dark);
+border-left-color: var(–orange);
+font-weight: 600;
+}
+
+.nav-item .icon {
+width: 16px; height: 16px;
+flex-shrink: 0;
+opacity: 0.85;
+}
+
+/* ============ MAIN ============ */
+.main {
+padding: 24px 28px 40px;
+overflow-y: auto;
+min-width: 0;
+}
+
+.page-header {
+display: flex;
+align-items: flex-end;
+justify-content: space-between;
+margin-bottom: 20px;
+gap: 16px;
+flex-wrap: wrap;
+}
+
+.page-title {
+font-family: ‘Fraunces’, serif;
+font-size: 28px;
+font-weight: 600;
+letter-spacing: -0.02em;
+line-height: 1.1;
+}
+
+.page-subtitle {
+color: var(–text-muted);
+font-size: 13px;
+margin-top: 4px;
+}
+
+.filters {
+display: flex;
+gap: 8px;
+align-items: center;
+}
+
+.filter-pill {
+background: var(–panel);
+border: 1px solid var(–border);
+padding: 6px 12px;
+border-radius: 4px;
+font-size: 12.5px;
+color: var(–text-muted);
+cursor: pointer;
+display: flex;
+align-items: center;
+gap: 6px;
+transition: all 0.15s;
+}
+.filter-pill:hover { border-color: #C7CCD3; color: var(–text); }
+.filter-pill.active { background: var(–orange-soft); border-color: var(–orange); color: var(–orange-dark); font-weight: 500; }
+
+/* ============ KPI CARDS ============ */
+.kpis {
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+gap: 14px;
+margin-bottom: 24px;
+}
+
+.kpi {
+background: var(–panel);
+border: 1px solid var(–border);
+border-radius: 8px;
+padding: 16px 18px;
+box-shadow: var(–shadow-sm);
+position: relative;
+overflow: hidden;
+}
+
+.kpi::before {
+content: ‘’;
+position: absolute;
+top: 0; left: 0;
+width: 3px; height: 100%;
+background: var(–orange);
+}
+.kpi.green::before { background: var(–green); }
+.kpi.red::before   { background: var(–red); }
+.kpi.amber::before { background: var(–amber); }
+
+.kpi-label {
+font-size: 11.5px;
+text-transform: uppercase;
+letter-spacing: 0.05em;
+color: var(–text-subtle);
+font-weight: 600;
+}
+
+.kpi-value {
+font-family: ‘Fraunces’, serif;
+font-size: 32px;
+font-weight: 600;
+margin-top: 6px;
+letter-spacing: -0.02em;
+line-height: 1;
+}
+
+.kpi-meta {
+margin-top: 8px;
+font-size: 12px;
+color: var(–text-muted);
+display: flex;
+align-items: center;
+gap: 4px;
+}
+
+/* ============ CHART ROW ============ */
+.charts {
+display: grid;
+grid-template-columns: 1.4fr 1fr;
+gap: 14px;
+margin-bottom: 24px;
+}
+
+.panel {
+background: var(–panel);
+border: 1px solid var(–border);
+border-radius: 8px;
+box-shadow: var(–shadow-sm);
+}
+
+.panel-head {
+padding: 14px 18px 10px;
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.panel-title {
+font-weight: 600;
+font-size: 14px;
+color: var(–text);
+}
+
+.panel-body { padding: 18px; }
+
+.chart-wrap { position: relative; height: 240px; }
+
+/* ============ ISSUES LIST ============ */
+.list-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 12px 18px;
+border-bottom: 1px solid var(–border);
+background: #FAFAFB;
+}
+
+.list-title {
+font-weight: 600;
+font-size: 13px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.badge-count {
+background: #E8EAEE;
+color: var(–text-muted);
+padding: 1px 8px;
+border-radius: 10px;
+font-size: 11.5px;
+font-weight: 600;
+}
+
+.order-by {
+font-size: 12px;
+color: var(–text-muted);
+display: flex;
+align-items: center;
+gap: 6px;
+cursor: pointer;
+}
+
+.order-by select {
+background: var(–panel);
+border: 1px solid var(–border);
+border-radius: 4px;
+padding: 4px 8px;
+font-size: 12px;
+cursor: pointer;
+}
+
+.mr-list { max-height: 520px; overflow-y: auto; }
+
+.mr-item {
+padding: 12px 18px;
+border-bottom: 1px solid #EEF0F3;
+cursor: pointer;
+display: grid;
+grid-template-columns: 18px 1fr auto;
+gap: 12px;
+align-items: start;
+transition: background 0.1s;
+}
+
+.mr-item:hover { background: #F8F9FB; }
+.mr-item.selected { background: var(–orange-soft); }
+.mr-item:last-child { border-bottom: none; }
+
+.mr-checkbox {
+width: 16px; height: 16px;
+border-radius: 3px;
+background: var(–blue);
+display: grid; place-items: center;
+margin-top: 2px;
+}
+.mr-checkbox svg { width: 11px; height: 11px; color: white; }
+
+.mr-id {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 12px;
+color: var(–blue);
+font-weight: 500;
+}
+
+.mr-summary {
+font-size: 13.5px;
+color: var(–text);
+margin-top: 1px;
+line-height: 1.4;
+display: -webkit-box;
+-webkit-line-clamp: 1;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+
+.mr-meta {
+font-size: 11.5px;
+color: var(–text-subtle);
+margin-top: 4px;
+display: flex;
+gap: 10px;
+align-items: center;
+}
+
+.status-tag {
+font-size: 10.5px;
+text-transform: uppercase;
+letter-spacing: 0.05em;
+font-weight: 600;
+padding: 2px 8px;
+border-radius: 3px;
+white-space: nowrap;
+}
+.status-approved { background: var(–green-soft); color: var(–green); }
+.status-rejected { background: var(–red-soft); color: var(–red); }
+.status-pending  { background: var(–amber-soft); color: var(–amber); }
+.status-merged   { background: var(–blue-soft); color: var(–blue); }
+
+/* ============ DETAIL PANEL ============ */
+.detail {
+background: var(–panel);
+border-left: 1px solid var(–border);
+padding: 24px 22px;
+overflow-y: auto;
+}
+
+.detail-empty {
+text-align: center;
+color: var(–text-subtle);
+padding-top: 80px;
+font-size: 13px;
+}
+
+.detail-empty .ico {
+width: 48px; height: 48px;
+margin: 0 auto 14px;
+border-radius: 50%;
+background: var(–orange-soft);
+display: grid; place-items: center;
+color: var(–orange);
+}
+
+.detail-id {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 12px;
+color: var(–blue);
+font-weight: 500;
+background: var(–blue-soft);
+padding: 3px 8px;
+border-radius: 3px;
+display: inline-block;
+}
+
+.detail-title {
+font-family: ‘Fraunces’, serif;
+font-size: 19px;
+font-weight: 600;
+line-height: 1.25;
+margin-top: 10px;
+letter-spacing: -0.01em;
+}
+
+.detail-section {
+margin-top: 22px;
+}
+
+.detail-section-label {
+font-size: 10.5px;
+text-transform: uppercase;
+letter-spacing: 0.06em;
+font-weight: 700;
+color: var(–text-subtle);
+margin-bottom: 8px;
+}
+
+.detail-grid {
+display: grid;
+grid-template-columns: 95px 1fr;
+row-gap: 8px;
+column-gap: 10px;
+font-size: 13px;
+}
+.detail-grid dt { color: var(–text-muted); }
+.detail-grid dd { color: var(–text); font-weight: 500; word-break: break-word; }
+
+.summary-box {
+background: #FAFAFB;
+border: 1px solid var(–border);
+border-left: 3px solid var(–orange);
+border-radius: 4px;
+padding: 12px 14px;
+font-size: 13px;
+line-height: 1.55;
+color: var(–text);
+white-space: pre-wrap;
+}
+
+.detail-actions {
+margin-top: 20px;
+display: flex;
+gap: 8px;
+}
+
+.btn {
+padding: 7px 14px;
+border-radius: 4px;
+font-size: 13px;
+font-weight: 500;
+cursor: pointer;
+border: 1px solid var(–border);
+background: var(–panel);
+color: var(–text);
+text-decoration: none;
+display: inline-flex;
+align-items: center;
+gap: 6px;
+transition: all 0.15s;
+}
+.btn:hover { border-color: #B8BEC7; }
+.btn-primary {
+background: var(–orange);
+color: white;
+border-color: var(–orange);
+}
+.btn-primary:hover { background: var(–orange-dark); border-color: var(–orange-dark); }
+
+/* ============ STATES ============ */
+.skeleton {
+background: linear-gradient(90deg, #EEF0F3 0%, #F7F8FA 50%, #EEF0F3 100%);
+background-size: 200% 100%;
+animation: shimmer 1.4s infinite;
+border-radius: 4px;
+}
+@keyframes shimmer {
+0% { background-position: 200% 0; }
+100% { background-position: -200% 0; }
+}
+
+.error-banner {
+background: var(–red-soft);
+border: 1px solid #F0C0C0;
+color: var(–red);
+padding: 10px 14px;
+border-radius: 6px;
+font-size: 13px;
+margin-bottom: 16px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.config-banner {
+background: var(–amber-soft);
+border: 1px solid #E8C879;
+color: var(–amber);
+padding: 10px 14px;
+border-radius: 6px;
+font-size: 12.5px;
+margin-bottom: 16px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 1200px) {
+.shell { grid-template-columns: 220px 1fr; }
+.detail { display: none; }
+.charts { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+.shell { grid-template-columns: 1fr; }
+.sidebar { display: none; }
+.kpis { grid-template-columns: repeat(2, 1fr); }
+.nav { display: none; }
+}
+
+/* ============ SCROLLBAR ============ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D4D8DE; border-radius: 5px; border: 2px solid var(–bg); }
+::-webkit-scrollbar-thumb:hover { background: #B8BEC7; }
+</style>
+
+</head>
+<body>
+
+<!-- ===== TOP BAR ===== -->
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">M</div>
+    <span>MR Bot</span>
+  </div>
+  <nav class="nav">
+    <a href="#" class="active">Dashboard</a>
+    <a href="#">Merge Requests</a>
+    <a href="#">Projects</a>
+    <a href="#">Reports</a>
+    <a href="#">Settings</a>
+  </nav>
+  <div class="topbar-actions">
+    <button class="btn-refresh" id="btnRefresh" title="Atualizar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span>Atualizar</span>
+    </button>
+    <div class="avatar" title="George">G</div>
+  </div>
+</header>
+
+<!-- ===== SHELL ===== -->
+
+<div class="shell">
+
+  <!-- ====== SIDEBAR ====== -->
+
+  <aside class="sidebar">
+    <div class="project-header">
+      <div class="project-icon">MR</div>
+      <div class="project-info">
+        <div class="project-name">MR Bot · DevEx</div>
+        <div class="project-sub">Automation</div>
+      </div>
+    </div>
+
+```
+<div class="nav-group">
+  <div class="nav-group-label">Insights</div>
+  <div class="nav-item active" data-view="overview">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+    <span>Overview</span>
+  </div>
+  <div class="nav-item" data-view="approved">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+    <span>Approved</span>
+  </div>
+  <div class="nav-item" data-view="rejected">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <span>Rejected</span>
+  </div>
+  <div class="nav-item" data-view="pending">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span>Pending Review</span>
+  </div>
+</div>
+
+<div class="nav-group">
+  <div class="nav-group-label">Resources</div>
+  <div class="nav-item" data-view="projects">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+    <span>Projects</span>
+  </div>
+  <div class="nav-item" data-view="merged">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg>
+    <span>Merged</span>
+  </div>
+  <div class="nav-item" data-view="all">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <span>All Issues</span>
+  </div>
+</div>
+```
+
+  </aside>
+
+  <!-- ====== MAIN ====== -->
+
+  <main class="main">
+
+```
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Merge Request Insights</h1>
+    <p class="page-subtitle">Atividade do bot de revisão automática · DynamoDB</p>
+  </div>
+  <div class="filters">
+    <button class="filter-pill active" data-period="7">Últimos 7 dias</button>
+    <button class="filter-pill" data-period="30">30 dias</button>
+    <button class="filter-pill" data-period="all">Tudo</button>
+  </div>
+</div>
+
+<div id="errorSlot"></div>
+
+<!-- KPIs -->
+<section class="kpis" id="kpis">
+  <div class="kpi">
+    <div class="kpi-label">Total Processados</div>
+    <div class="kpi-value" id="kpi-total">—</div>
+    <div class="kpi-meta">Todos os MRs registrados</div>
+  </div>
+  <div class="kpi green">
+    <div class="kpi-label">Aprovados</div>
+    <div class="kpi-value" id="kpi-approved">—</div>
+    <div class="kpi-meta" id="kpi-approved-pct">—</div>
+  </div>
+  <div class="kpi red">
+    <div class="kpi-label">Rejeitados</div>
+    <div class="kpi-value" id="kpi-rejected">—</div>
+    <div class="kpi-meta" id="kpi-rejected-pct">—</div>
+  </div>
+  <div class="kpi amber">
+    <div class="kpi-label">Pending Review</div>
+    <div class="kpi-value" id="kpi-pending">—</div>
+    <div class="kpi-meta" id="kpi-pending-pct">—</div>
+  </div>
+</section>
+
+<!-- CHARTS -->
+<section class="charts">
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Volume por dia</div>
+      <span class="badge-count" id="chartTotalLabel">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="chart-wrap"><canvas id="chartTimeline"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Top projetos</div>
+      <span class="badge-count" id="chartProjectsLabel">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="chart-wrap"><canvas id="chartProjects"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- LISTA -->
+<div class="panel">
+  <div class="list-head">
+    <div class="list-title">
+      Open issues
+      <span class="badge-count" id="listCount">0</span>
+    </div>
+    <div class="order-by">
+      <span>Order by</span>
+      <select id="orderBy">
+        <option value="updated_at">Last updated</option>
+        <option value="created_at">Created date</option>
+        <option value="status">Status</option>
+        <option value="project_name">Project</option>
+      </select>
+    </div>
+  </div>
+  <div class="mr-list" id="mrList">
+    <div style="padding:40px;text-align:center;color:var(--text-subtle)">Carregando merge requests…</div>
+  </div>
+</div>
+```
+
+  </main>
+
+  <!-- ====== DETAIL PANEL ====== -->
+
+  <aside class="detail" id="detailPanel">
+    <div class="detail-empty">
+      <div class="ico">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg>
+      </div>
+      <div>Selecione um merge request</div>
+      <div style="font-size:12px;margin-top:4px;color:var(--text-subtle)">para ver os detalhes</div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — ajuste a URL do API Gateway aqui
+   ============================================================ */
+const API_BASE = window.MR_API_BASE || 'https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod';
+const API_PATH = '/dashboard';
+/* Se sua API exige autenticação (api key, IAM, etc), ajuste aqui */
+const API_HEADERS = {
+  'Content-Type': 'application/json',
+  // 'x-api-key': 'sua-key',
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  data: null,
+  filteredItems: [],
+  selectedSk: null,
+  view: 'overview',
+  period: '7',
+  orderBy: 'updated_at',
+  charts: { timeline: null, projects: null },
+};
+
+/* ============================================================
+   API
+   ============================================================ */
+async function fetchDashboard(period = '7') {
+  const url = `${API_BASE}${API_PATH}?period=${encodeURIComponent(period)}`;
+  const resp = await fetch(url, { method: 'GET', headers: API_HEADERS });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status} — ${text || resp.statusText}`);
+  }
+  return resp.json();
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function renderKPIs(stats) {
+  const total = stats.total || 0;
+  const a = stats.by_status?.approved ?? 0;
+  const r = stats.by_status?.rejected ?? 0;
+  const p = stats.by_status?.pending ?? 0;
+  const pct = (n) => total ? Math.round((n / total) * 100) + '%' : '0%';
+
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-approved').textContent = a;
+  document.getElementById('kpi-rejected').textContent = r;
+  document.getElementById('kpi-pending').textContent = p;
+  document.getElementById('kpi-approved-pct').textContent = `${pct(a)} do total`;
+  document.getElementById('kpi-rejected-pct').textContent = `${pct(r)} do total`;
+  document.getElementById('kpi-pending-pct').textContent = `${pct(p)} aguardando review`;
+}
+
+function renderTimeline(timeline = []) {
+  const ctx = document.getElementById('chartTimeline').getContext('2d');
+  if (state.charts.timeline) state.charts.timeline.destroy();
+
+  const labels = timeline.map(d => d.date);
+  const total = timeline.reduce((s, d) => s + (d.total || 0), 0);
+  document.getElementById('chartTotalLabel').textContent = `${total} MRs`;
+
+  state.charts.timeline = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Aprovados',
+          data: timeline.map(d => d.approved || 0),
+          borderColor: '#2E7D5B',
+          backgroundColor: 'rgba(46,125,91,0.08)',
+          tension: 0.35, fill: true, borderWidth: 2,
+          pointRadius: 0, pointHoverRadius: 5,
+        },
+        {
+          label: 'Rejeitados',
+          data: timeline.map(d => d.rejected || 0),
+          borderColor: '#C63838',
+          backgroundColor: 'rgba(198,56,56,0.06)',
+          tension: 0.35, fill: true, borderWidth: 2,
+          pointRadius: 0, pointHoverRadius: 5,
+        },
+        {
+          label: 'Pendentes',
+          data: timeline.map(d => d.pending || 0),
+          borderColor: '#B5751F',
+          backgroundColor: 'rgba(181,117,31,0.05)',
+          tension: 0.35, fill: true, borderWidth: 2,
+          pointRadius: 0, pointHoverRadius: 5,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom', align: 'start',
+          labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'circle', font: { size: 11.5, family: 'Inter' } }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(27,31,38,0.95)',
+          titleFont: { size: 12, weight: '600' },
+          bodyFont: { size: 12 }, padding: 10, cornerRadius: 6, boxPadding: 4,
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#8C95A1' } },
+        y: { beginAtZero: true, grid: { color: '#EEF0F3' }, ticks: { font: { size: 11 }, color: '#8C95A1', precision: 0 } },
+      },
+    },
+  });
+}
+
+function renderProjects(projects = []) {
+  const ctx = document.getElementById('chartProjects').getContext('2d');
+  if (state.charts.projects) state.charts.projects.destroy();
+
+  const top = projects.slice(0, 6);
+  document.getElementById('chartProjectsLabel').textContent = `${projects.length} projetos`;
+
+  state.charts.projects = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(p => p.project_name?.length > 22 ? p.project_name.slice(0, 22) + '…' : p.project_name),
+      datasets: [{
+        data: top.map(p => p.count),
+        backgroundColor: '#DE5B14',
+        hoverBackgroundColor: '#B8470F',
+        borderRadius: 4, barThickness: 18,
+      }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(27,31,38,0.95)',
+          callbacks: { label: (ctx) => `${ctx.parsed.x} merge requests` },
+          titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 },
+          padding: 10, cornerRadius: 6,
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#EEF0F3' }, ticks: { font: { size: 11 }, color: '#8C95A1', precision: 0 } },
+        y: { grid: { display: false }, ticks: { font: { size: 11.5 }, color: '#1B1F26' } },
+      },
+    },
+  });
+}
+
+function statusClass(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('approv'))  return 'status-approved';
+  if (s.includes('reject'))  return 'status-rejected';
+  if (s.includes('pend') || s.includes('review')) return 'status-pending';
+  if (s.includes('merg'))    return 'status-merged';
+  return 'status-pending';
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) +
+         ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function applyView(items) {
+  let out = items.slice();
+  if (state.view === 'approved')  out = out.filter(i => statusClass(i.status) === 'status-approved');
+  if (state.view === 'rejected')  out = out.filter(i => statusClass(i.status) === 'status-rejected');
+  if (state.view === 'pending')   out = out.filter(i => statusClass(i.status) === 'status-pending');
+  if (state.view === 'merged')    out = out.filter(i => i.merged === true || i.merged === 'true');
+  return out;
+}
+
+function applyOrder(items) {
+  const key = state.orderBy;
+  return items.slice().sort((a, b) => {
+    const va = a[key] ?? '';
+    const vb = b[key] ?? '';
+    if (key === 'created_at' || key === 'updated_at') {
+      return new Date(vb) - new Date(va);
+    }
+    return String(va).localeCompare(String(vb));
+  });
+}
+
+function renderList(items) {
+  const filtered = applyOrder(applyView(items));
+  state.filteredItems = filtered;
+  document.getElementById('listCount').textContent = filtered.length;
+
+  const list = document.getElementById('mrList');
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-subtle)">Nenhum merge request encontrado.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(it => {
+    const sel = state.selectedSk === it.sk ? 'selected' : '';
+    const cls = statusClass(it.status);
+    const label = (it.status || 'pending').toUpperCase();
+    return `
+      <div class="mr-item ${sel}" data-sk="${escapeAttr(it.sk)}">
+        <div class="mr-checkbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div>
+          <span class="mr-id">${escapeHtml(it.project_name || '—')} · MR !${escapeHtml(String(it.mr_iid || ''))}</span>
+          <div class="mr-summary">${escapeHtml(truncate(it.agent_summary, 90) || '(sem resumo)')}</div>
+          <div class="mr-meta">
+            <span>${formatDate(it.updated_at || it.created_at)}</span>
+            <span>·</span>
+            <span>project ${escapeHtml(String(it.project_id || '—'))}</span>
+          </div>
+        </div>
+        <span class="status-tag ${cls}">${escapeHtml(label)}</span>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.mr-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const sk = el.dataset.sk;
+      state.selectedSk = sk;
+      list.querySelectorAll('.mr-item').forEach(n => n.classList.remove('selected'));
+      el.classList.add('selected');
+      const item = filtered.find(i => i.sk === sk);
+      renderDetail(item);
+    });
+  });
+}
+
+function renderDetail(item) {
+  const panel = document.getElementById('detailPanel');
+  if (!item) {
+    panel.innerHTML = `
+      <div class="detail-empty">
+        <div class="ico">…</div>
+        <div>Selecione um merge request</div>
+      </div>`;
+    return;
+  }
+
+  const cls = statusClass(item.status);
+  const label = (item.status || 'pending').toUpperCase();
+
+  panel.innerHTML = `
+    <span class="detail-id">MR !${escapeHtml(String(item.mr_iid || ''))}</span>
+    <span class="status-tag ${cls}" style="margin-left:6px">${escapeHtml(label)}</span>
+    <h2 class="detail-title">${escapeHtml(item.project_name || 'Merge Request')}</h2>
+
+    <div class="detail-actions">
+      ${item.mr_url ? `<a class="btn btn-primary" href="${escapeAttr(item.mr_url)}" target="_blank" rel="noopener">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Abrir MR
+      </a>` : ''}
+      <button class="btn" onclick="copyToClipboard('${escapeAttr(item.sk)}')">Copiar SK</button>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-label">Details</div>
+      <dl class="detail-grid">
+        <dt>Project</dt><dd>${escapeHtml(item.project_name || '—')}</dd>
+        <dt>Project ID</dt><dd>${escapeHtml(String(item.project_id || '—'))}</dd>
+        <dt>MR IID</dt><dd>!${escapeHtml(String(item.mr_iid || '—'))}</dd>
+        <dt>Status</dt><dd>${escapeHtml(item.status || '—')}</dd>
+        <dt>Merged</dt><dd>${item.merged === true || item.merged === 'true' ? 'Sim' : 'Não'}</dd>
+        <dt>Created</dt><dd>${formatDate(item.created_at)}</dd>
+        <dt>Updated</dt><dd>${formatDate(item.updated_at)}</dd>
+      </dl>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-label">Agent Summary</div>
+      <div class="summary-box">${escapeHtml(item.agent_summary || '(sem resumo do agente)')}</div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s) { return escapeHtml(s).replace(/`/g, '&#96;'); }
+function truncate(s, n) { s = s ?? ''; return s.length > n ? s.slice(0, n) + '…' : s; }
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const t = document.createElement('div');
+    t.textContent = 'Copiado!';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1B1F26;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 1500);
+  });
+}
+function showError(msg) {
+  document.getElementById('errorSlot').innerHTML = `
+    <div class="error-banner">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>${escapeHtml(msg)}</div>
+    </div>`;
+}
+function showConfigBanner() {
+  document.getElementById('errorSlot').innerHTML = `
+    <div class="config-banner">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div>Configure <code style="background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px">API_BASE</code> em <code style="background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px">index.html</code> com sua URL do API Gateway.</div>
+    </div>`;
+}
+
+/* ============================================================
+   LOAD
+   ============================================================ */
+async function load() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  document.getElementById('errorSlot').innerHTML = '';
+
+  if (API_BASE.includes('YOUR_API_ID')) {
+    showConfigBanner();
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const data = await fetchDashboard(state.period);
+    state.data = data;
+
+    renderKPIs(data.stats || {});
+    renderTimeline(data.timeline || []);
+    renderProjects(data.top_projects || []);
+    renderList(data.items || []);
+
+    // re-seleciona se ainda existir
+    if (state.selectedSk) {
+      const stillThere = (data.items || []).find(i => i.sk === state.selectedSk);
+      if (stillThere) renderDetail(stillThere);
+      else { state.selectedSk = null; renderDetail(null); }
+    }
+  } catch (err) {
+    console.error(err);
+    showError(`Falha ao carregar dados: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+document.getElementById('btnRefresh').addEventListener('click', load);
+
+document.querySelectorAll('.filter-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    state.period = pill.dataset.period;
+    load();
+  });
+});
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    state.view = el.dataset.view;
+    if (state.data) renderList(state.data.items || []);
+  });
+});
+
+document.getElementById('orderBy').addEventListener('change', (e) => {
+  state.orderBy = e.target.value;
+  if (state.data) renderList(state.data.items || []);
+});
+
+/* boot */
+load();
+</script>
+
+</body>
+</html>
