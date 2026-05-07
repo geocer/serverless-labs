@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MR Bot · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --orange: #DE5B14;
+    --orange-dark: #B8470F;
+    --orange-soft: #FFF1E8;
+    --bg: #F7F8FA;
+    --panel: #FFFFFF;
+    --border: #E4E6EA;
+    --text: #1B1F26;
+    --text-muted: #5C6470;
+    --text-subtle: #8C95A1;
+    --green: #2E7D5B;
+    --green-soft: #E3F4EB;
+    --red: #C63838;
+    --red-soft: #FBE7E7;
+    --amber: #B5751F;
+    --amber-soft: #FFF1D6;
+    --blue: #2563A8;
+    --blue-soft: #E4EEFA;
+    --shadow-sm: 0 1px 2px rgba(15,22,36,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+
+  /* TOPBAR */
+  .topbar { background: linear-gradient(180deg, var(--orange) 0%, var(--orange-dark) 100%); color: white; padding: 0 24px; height: 48px; display: flex; align-items: center; gap: 28px; position: sticky; top: 0; z-index: 50; box-shadow: 0 1px 0 rgba(0,0,0,0.08); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .brand-mark { width: 28px; height: 28px; background: white; color: var(--orange); border-radius: 6px; display: grid; place-items: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 16px; }
+  .nav { display: flex; gap: 4px; flex: 1; }
+  .nav a { color: rgba(255,255,255,0.92); text-decoration: none; font-size: 13.5px; font-weight: 500; padding: 6px 12px; border-radius: 4px; transition: background 0.15s; }
+  .nav a:hover { background: rgba(255,255,255,0.12); }
+  .nav a.active { background: rgba(0,0,0,0.18); }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-refresh { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 4px; font-size: 12.5px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.15s; }
+  .btn-refresh:hover { background: rgba(255,255,255,0.25); }
+  .btn-refresh:disabled { opacity: 0.6; cursor: wait; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.25); display: grid; place-items: center; font-weight: 600; font-size: 12px; }
+
+  /* LAYOUT */
+  .shell { display: grid; grid-template-columns: 240px 1fr 360px; min-height: calc(100vh - 48px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 20px 0; overflow-y: auto; }
+  .project-header { padding: 0 20px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  .project-icon { width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, var(--orange) 0%, #F4A261 100%); display: grid; place-items: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .project-name { font-weight: 600; font-size: 13.5px; }
+  .project-sub { color: var(--text-subtle); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .nav-group { padding: 4px 0 12px; }
+  .nav-group-label { padding: 8px 20px 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-subtle); font-weight: 600; }
+  .nav-item { padding: 7px 20px; display: flex; align-items: center; gap: 11px; cursor: pointer; color: var(--text-muted); font-size: 13.5px; border-left: 3px solid transparent; user-select: none; transition: background 0.1s; }
+  .nav-item:hover { background: #F2F3F5; color: var(--text); }
+  .nav-item.active { background: var(--orange-soft); color: var(--orange-dark); border-left-color: var(--orange); font-weight: 600; }
+  .nav-item .icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* MAIN */
+  .main { padding: 24px 28px 40px; overflow-y: auto; min-width: 0; }
+  .page-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+  .page-title { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .page-subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+  .filters { display: flex; gap: 8px; }
+  .filter-pill { background: var(--panel); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .filter-pill:hover { border-color: #C7CCD3; color: var(--text); }
+  .filter-pill.active { background: var(--orange-soft); border-color: var(--orange); color: var(--orange-dark); font-weight: 500; }
+
+  /* KPIS */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--orange); }
+  .kpi.green::before { background: var(--green); }
+  .kpi.red::before { background: var(--red); }
+  .kpi.amber::before { background: var(--amber); }
+  .kpi-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-subtle); font-weight: 600; }
+  .kpi-value { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 600; margin-top: 6px; letter-spacing: -0.02em; line-height: 1; }
+  .kpi-meta { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+
+  /* CHARTS */
+  .charts { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
+  .panel-head { padding: 14px 18px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-weight: 600; font-size: 14px; }
+  .panel-body { padding: 18px; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* LIST */
+  .list-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); background: #FAFAFB; }
+  .list-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .badge-count { background: #E8EAEE; color: var(--text-muted); padding: 1px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+  .order-by { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .order-by select { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .mr-list { max-height: 520px; overflow-y: auto; }
+  .mr-item { padding: 12px 18px; border-bottom: 1px solid #EEF0F3; cursor: pointer; display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; align-items: start; transition: background 0.1s; }
+  .mr-item:hover { background: #F8F9FB; }
+  .mr-item.selected { background: var(--orange-soft); }
+  .mr-item:last-child { border-bottom: none; }
+  .mr-checkbox { width: 16px; height: 16px; border-radius: 3px; background: var(--blue); display: grid; place-items: center; margin-top: 2px; }
+  .mr-checkbox svg { width: 11px; height: 11px; color: white; }
+  .mr-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); font-weight: 500; }
+  .mr-summary { font-size: 13.5px; color: var(--text); margin-top: 1px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .mr-meta { font-size: 11.5px; color: var(--text-subtle); margin-top: 4px; display: flex; gap: 10px; }
+  .status-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+  .status-approved { background: var(--green-soft); color: var(--green); }
+  .status-rejected { background: var(--red-soft); color: var(--red); }
+  .status-pending { background: var(--amber-soft); color: var(--amber); }
+  .status-merged { background: var(--blue-soft); color: var(--blue); }
+
+  /* DETAIL */
+  .detail { background: var(--panel); border-left: 1px solid var(--border); padding: 24px 22px; overflow-y: auto; }
+  .detail-empty { text-align: center; color: var(--text-subtle); padding-top: 80px; font-size: 13px; }
+  .detail-empty .ico { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 50%; background: var(--orange-soft); display: grid; place-items: center; color: var(--orange); }
+  .detail-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); font-weight: 500; background: var(--blue-soft); padding: 3px 8px; border-radius: 3px; display: inline-block; }
+  .detail-title { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; line-height: 1.25; margin-top: 10px; letter-spacing: -0.01em; }
+  .detail-section { margin-top: 22px; }
+  .detail-section-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-subtle); margin-bottom: 8px; }
+  .detail-grid { display: grid; grid-template-columns: 95px 1fr; row-gap: 8px; column-gap: 10px; font-size: 13px; }
+  .detail-grid dt { color: var(--text-muted); }
+  .detail-grid dd { color: var(--text); font-weight: 500; word-break: break-word; }
+  .summary-box { background: #FAFAFB; border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 4px; padding: 12px 14px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+  .detail-actions { margin-top: 20px; display: flex; gap: 8px; }
+  .btn { padding: 7px 14px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .btn:hover { border-color: #B8BEC7; }
+  .btn-primary { background: var(--orange); color: white; border-color: var(--orange); }
+  .btn-primary:hover { background: var(--orange-dark); }
+
+  /* STATES */
+  .error-banner { background: var(--red-soft); border: 1px solid #F0C0C0; color: var(--red); padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 1200px) { .shell { grid-template-columns: 220px 1fr; } .detail { display: none; } .charts { grid-template-columns: 1fr; } }
+  @media (max-width: 768px) { .shell { grid-template-columns: 1fr; } .sidebar { display: none; } .kpis { grid-template-columns: repeat(2, 1fr); } .nav { display: none; } }
+  ::-webkit-scrollbar { width: 10px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #D4D8DE; border-radius: 5px; border: 2px solid var(--bg); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">M</div>
+    <span>MR Bot</span>
+  </div>
+  <nav class="nav">
+    <a href="#" class="active">Dashboard</a>
+    <a href="#">Merge Requests</a>
+    <a href="#">Projects</a>
+    <a href="#">Reports</a>
+  </nav>
+  <div class="topbar-actions">
+    <button class="btn-refresh" id="btnRefresh">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Atualizar
+    </button>
+    <div class="avatar">G</div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="project-header">
+      <div class="project-icon">MR</div>
+      <div>
+        <div class="project-name">MR Bot · DevEx</div>
+        <div class="project-sub">Automation</div>
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Insights</div>
+      <div class="nav-item active" data-view="overview">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Overview
+      </div>
+      <div class="nav-item" data-view="approved">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        Approved
+      </div>
+      <div class="nav-item" data-view="rejected">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Rejected
+      </div>
+      <div class="nav-item" data-view="pending">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Pending Review
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Resources</div>
+      <div class="nav-item" data-view="projects">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+        Projects
+      </div>
+      <div class="nav-item" data-view="merged">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg>
+        Merged
+      </div>
+      <div class="nav-item" data-view="all">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        All Issues
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Merge Request Insights</h1>
+        <p class="page-subtitle">Atividade do bot de revisão automática · DynamoDB</p>
+      </div>
+      <div class="filters">
+        <button class="filter-pill active" data-period="7">Últimos 7 dias</button>
+        <button class="filter-pill" data-period="30">30 dias</button>
+        <button class="filter-pill" data-period="all">Tudo</button>
+      </div>
+    </div>
+
+    <div id="errorSlot"></div>
+
+    <section class="kpis">
+      <div class="kpi"><div class="kpi-label">Total Processados</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-meta">Todos os MRs</div></div>
+      <div class="kpi green"><div class="kpi-label">Aprovados</div><div class="kpi-value" id="kpi-approved">—</div><div class="kpi-meta" id="kpi-approved-pct">—</div></div>
+      <div class="kpi red"><div class="kpi-label">Rejeitados</div><div class="kpi-value" id="kpi-rejected">—</div><div class="kpi-meta" id="kpi-rejected-pct">—</div></div>
+      <div class="kpi amber"><div class="kpi-label">Pending Review</div><div class="kpi-value" id="kpi-pending">—</div><div class="kpi-meta" id="kpi-pending-pct">—</div></div>
+    </section>
+
+    <section class="charts">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Volume por dia</div><span class="badge-count" id="chartTotalLabel">—</span></div>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="chartTimeline"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Top projetos</div><span class="badge-count" id="chartProjectsLabel">—</span></div>
+        <div class="panel-body"><div class="chart-wrap"><canvas id="chartProjects"></canvas></div></div>
+      </div>
+    </section>
+
+    <div class="panel">
+      <div class="list-head">
+        <div class="list-title">Open issues <span class="badge-count" id="listCount">0</span></div>
+        <div class="order-by">
+          Order by
+          <select id="orderBy">
+            <option value="updated_at">Last updated</option>
+            <option value="created_at">Created date</option>
+            <option value="status">Status</option>
+            <option value="project_name">Project</option>
+          </select>
+        </div>
+      </div>
+      <div class="mr-list" id="mrList">
+        <div style="padding:40px;text-align:center;color:var(--text-subtle)">Carregando…</div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="detail" id="detailPanel">
+    <div class="detail-empty">
+      <div class="ico">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg>
+      </div>
+      <div>Selecione um merge request</div>
+      <div style="font-size:12px;margin-top:4px">para ver os detalhes</div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — aponta pro proxy Flask local (mesmo origin, sem CORS)
+   ============================================================ */
+const API_BASE = '';           // mesmo host/porta do Flask
+const API_PATH = '/api/dashboard';
+
+const state = { data: null, filteredItems: [], selectedSk: null, view: 'overview', period: '7', orderBy: 'updated_at', charts: { timeline: null, projects: null } };
+
+async function fetchDashboard(period = '7') {
+  const resp = await fetch(`${API_BASE}${API_PATH}?period=${period}`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+function renderKPIs(s) {
+  const t = s.total || 0;
+  const pct = n => t ? Math.round(n/t*100)+'%' : '0%';
+  document.getElementById('kpi-total').textContent = t;
+  document.getElementById('kpi-approved').textContent = s.by_status?.approved ?? 0;
+  document.getElementById('kpi-rejected').textContent = s.by_status?.rejected ?? 0;
+  document.getElementById('kpi-pending').textContent = s.by_status?.pending ?? 0;
+  document.getElementById('kpi-approved-pct').textContent = pct(s.by_status?.approved ?? 0) + ' do total';
+  document.getElementById('kpi-rejected-pct').textContent = pct(s.by_status?.rejected ?? 0) + ' do total';
+  document.getElementById('kpi-pending-pct').textContent = pct(s.by_status?.pending ?? 0) + ' aguardando';
+}
+
+function renderTimeline(tl = []) {
+  const ctx = document.getElementById('chartTimeline').getContext('2d');
+  if (state.charts.timeline) state.charts.timeline.destroy();
+  document.getElementById('chartTotalLabel').textContent = tl.reduce((s,d)=>s+(d.total||0),0)+' MRs';
+  state.charts.timeline = new Chart(ctx, {
+    type: 'line',
+    data: { labels: tl.map(d=>d.date), datasets: [
+      { label:'Aprovados', data: tl.map(d=>d.approved||0), borderColor:'#2E7D5B', backgroundColor:'rgba(46,125,91,0.08)', tension:0.35, fill:true, borderWidth:2, pointRadius:0, pointHoverRadius:5 },
+      { label:'Rejeitados', data: tl.map(d=>d.rejected||0), borderColor:'#C63838', backgroundColor:'rgba(198,56,56,0.06)', tension:0.35, fill:true, borderWidth:2, pointRadius:0, pointHoverRadius:5 },
+      { label:'Pendentes', data: tl.map(d=>d.pending||0), borderColor:'#B5751F', backgroundColor:'rgba(181,117,31,0.05)', tension:0.35, fill:true, borderWidth:2, pointRadius:0, pointHoverRadius:5 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'bottom',align:'start',labels:{boxWidth:8,boxHeight:8,usePointStyle:true,pointStyle:'circle',font:{size:11.5,family:'Inter'}}},
+        tooltip:{backgroundColor:'rgba(27,31,38,0.95)',titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:6,boxPadding:4}},
+      scales:{ x:{grid:{display:false},ticks:{font:{size:11},color:'#8C95A1'}}, y:{beginAtZero:true,grid:{color:'#EEF0F3'},ticks:{font:{size:11},color:'#8C95A1',precision:0}} }
+    }
+  });
+}
+
+function renderProjects(proj = []) {
+  const ctx = document.getElementById('chartProjects').getContext('2d');
+  if (state.charts.projects) state.charts.projects.destroy();
+  const top = proj.slice(0,6);
+  document.getElementById('chartProjectsLabel').textContent = proj.length+' projetos';
+  state.charts.projects = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: top.map(p=>p.project_name?.length>22?p.project_name.slice(0,22)+'…':p.project_name),
+      datasets:[{data:top.map(p=>p.count),backgroundColor:'#DE5B14',hoverBackgroundColor:'#B8470F',borderRadius:4,barThickness:18}]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(27,31,38,0.95)',callbacks:{label:ctx=>`${ctx.parsed.x} merge requests`},titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:6}},
+      scales:{ x:{beginAtZero:true,grid:{color:'#EEF0F3'},ticks:{font:{size:11},color:'#8C95A1',precision:0}}, y:{grid:{display:false},ticks:{font:{size:11.5},color:'#1B1F26'}} }
+    }
+  });
+}
+
+function statusClass(s) {
+  s = (s||'').toLowerCase();
+  if(s.includes('approv')) return 'status-approved';
+  if(s.includes('reject')) return 'status-rejected';
+  if(s.includes('pend')||s.includes('review')) return 'status-pending';
+  if(s.includes('merg')) return 'status-merged';
+  return 'status-pending';
+}
+function formatDate(iso) {
+  if(!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d)?iso:d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function trunc(s,n){s=s??'';return s.length>n?s.slice(0,n)+'…':s;}
+
+function applyView(items) {
+  let o = items.slice();
+  if(state.view==='approved') o=o.filter(i=>statusClass(i.status)==='status-approved');
+  if(state.view==='rejected') o=o.filter(i=>statusClass(i.status)==='status-rejected');
+  if(state.view==='pending')  o=o.filter(i=>statusClass(i.status)==='status-pending');
+  if(state.view==='merged')   o=o.filter(i=>i.merged===true||i.merged==='true');
+  return o;
+}
+function applyOrder(items) {
+  const k=state.orderBy;
+  return items.slice().sort((a,b)=>{
+    if(k==='created_at'||k==='updated_at') return new Date(b[k]||0)-new Date(a[k]||0);
+    return String(a[k]??'').localeCompare(String(b[k]??''));
+  });
+}
+
+function renderList(items) {
+  const filtered = applyOrder(applyView(items));
+  state.filteredItems = filtered;
+  document.getElementById('listCount').textContent = filtered.length;
+  const list = document.getElementById('mrList');
+  if(!filtered.length){list.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-subtle)">Nenhum MR encontrado.</div>';return;}
+  list.innerHTML = filtered.map(it=>`
+    <div class="mr-item${state.selectedSk===it.sk?' selected':''}" data-sk="${esc(it.sk)}">
+      <div class="mr-checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div>
+        <span class="mr-id">${esc(it.project_name||'—')} · MR !${esc(String(it.mr_iid||''))}</span>
+        <div class="mr-summary">${esc(trunc(it.agent_summary,90)||'(sem resumo)')}</div>
+        <div class="mr-meta"><span>${formatDate(it.updated_at||it.created_at)}</span><span>·</span><span>project ${esc(String(it.project_id||'—'))}</span></div>
+      </div>
+      <span class="status-tag ${statusClass(it.status)}">${esc((it.status||'pending').toUpperCase())}</span>
+    </div>`).join('');
+  list.querySelectorAll('.mr-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      state.selectedSk=el.dataset.sk;
+      list.querySelectorAll('.mr-item').forEach(n=>n.classList.remove('selected'));
+      el.classList.add('selected');
+      renderDetail(filtered.find(i=>i.sk===el.dataset.sk));
+    });
+  });
+}
+
+function renderDetail(item) {
+  const panel = document.getElementById('detailPanel');
+  if(!item){panel.innerHTML='<div class="detail-empty"><div class="ico">…</div><div>Selecione um MR</div></div>';return;}
+  const cls = statusClass(item.status);
+  panel.innerHTML = `
+    <span class="detail-id">MR !${esc(String(item.mr_iid||''))}</span>
+    <span class="status-tag ${cls}" style="margin-left:6px">${esc((item.status||'pending').toUpperCase())}</span>
+    <h2 class="detail-title">${esc(item.project_name||'Merge Request')}</h2>
+    <div class="detail-actions">
+      ${item.mr_url?`<a class="btn btn-primary" href="${esc(item.mr_url)}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Abrir MR</a>`:''}
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Details</div>
+      <dl class="detail-grid">
+        <dt>Project</dt><dd>${esc(item.project_name||'—')}</dd>
+        <dt>Project ID</dt><dd>${esc(String(item.project_id||'—'))}</dd>
+        <dt>MR IID</dt><dd>!${esc(String(item.mr_iid||'—'))}</dd>
+        <dt>Status</dt><dd>${esc(item.status||'—')}</dd>
+        <dt>Merged</dt><dd>${(item.merged===true||item.merged==='true')?'Sim':'Não'}</dd>
+        <dt>Created</dt><dd>${formatDate(item.created_at)}</dd>
+        <dt>Updated</dt><dd>${formatDate(item.updated_at)}</dd>
+      </dl>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Agent Summary</div>
+      <div class="summary-box">${esc(item.agent_summary||'(sem resumo)')}</div>
+    </div>`;
+}
+
+async function load() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  document.getElementById('errorSlot').innerHTML = '';
+  try {
+    const data = await fetchDashboard(state.period);
+    state.data = data;
+    renderKPIs(data.stats||{});
+    renderTimeline(data.timeline||[]);
+    renderProjects(data.top_projects||[]);
+    renderList(data.items||[]);
+    if(state.selectedSk){
+      const it=(data.items||[]).find(i=>i.sk===state.selectedSk);
+      it?renderDetail(it):(state.selectedSk=null,renderDetail(null));
+    }
+  } catch(e) {
+    console.error(e);
+    document.getElementById('errorSlot').innerHTML=`<div class="error-banner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Falha ao carregar: ${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+document.getElementById('btnRefresh').addEventListener('click', load);
+document.querySelectorAll('.filter-pill').forEach(p=>p.addEventListener('click',()=>{
+  document.querySelectorAll('.filter-pill').forEach(x=>x.classList.remove('active'));
+  p.classList.add('active'); state.period=p.dataset.period; load();
+}));
+document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active'); state.view=el.dataset.view;
+  if(state.data) renderList(state.data.items||[]);
+}));
+document.getElementById('orderBy').addEventListener('change',e=>{state.orderBy=e.target.value;if(state.data)renderList(state.data.items||[]);});
+
+load();
+</script>
+</body>
+</html>
