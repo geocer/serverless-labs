@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MR Bot · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --orange: #DE5B14; --orange-dark: #B8470F; --orange-soft: #FFF1E8;
+    --purple: #5C4FB8; --purple-soft: #ECE9F8;     /* Terraform accent */
+    --bg: #F7F8FA; --panel: #FFFFFF; --border: #E4E6EA;
+    --text: #1B1F26; --text-muted: #5C6470; --text-subtle: #8C95A1;
+    --green: #2E7D5B; --green-soft: #E3F4EB;
+    --red: #C63838; --red-soft: #FBE7E7;
+    --amber: #B5751F; --amber-soft: #FFF1D6;
+    --blue: #2563A8; --blue-soft: #E4EEFA;
+    --shadow-sm: 0 1px 2px rgba(15,22,36,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+
+  /* TOPBAR */
+  .topbar { background: linear-gradient(180deg, var(--orange) 0%, var(--orange-dark) 100%); color: white; padding: 0 24px; height: 48px; display: flex; align-items: center; gap: 28px; position: sticky; top: 0; z-index: 50; box-shadow: 0 1px 0 rgba(0,0,0,0.08); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .brand-mark { width: 28px; height: 28px; background: white; color: var(--orange); border-radius: 6px; display: grid; place-items: center; font-family: 'Fraunces', serif; font-weight: 700; font-size: 16px; }
+  .nav { display: flex; gap: 4px; flex: 1; }
+  .nav a { color: rgba(255,255,255,0.92); text-decoration: none; font-size: 13.5px; font-weight: 500; padding: 6px 12px; border-radius: 4px; transition: background 0.15s; }
+  .nav a:hover { background: rgba(255,255,255,0.12); }
+  .nav a.active { background: rgba(0,0,0,0.18); }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+  .btn-refresh { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 4px; font-size: 12.5px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-refresh:hover { background: rgba(255,255,255,0.25); }
+  .btn-refresh:disabled { opacity: 0.6; cursor: wait; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.25); display: grid; place-items: center; font-weight: 600; font-size: 12px; }
+
+  /* LAYOUT */
+  .shell { display: grid; grid-template-columns: 240px 1fr 360px; min-height: calc(100vh - 48px); }
+
+  /* SIDEBAR */
+  .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 20px 0; overflow-y: auto; }
+  .project-header { padding: 0 20px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  .project-icon { width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, var(--orange) 0%, #F4A261 100%); display: grid; place-items: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .project-name { font-weight: 600; font-size: 13.5px; }
+  .project-sub { color: var(--text-subtle); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .nav-group { padding: 4px 0 12px; }
+  .nav-group-label { padding: 8px 20px 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-subtle); font-weight: 600; }
+  .nav-item { padding: 7px 20px; display: flex; align-items: center; gap: 11px; cursor: pointer; color: var(--text-muted); font-size: 13.5px; border-left: 3px solid transparent; user-select: none; transition: background 0.1s; }
+  .nav-item:hover { background: #F2F3F5; color: var(--text); }
+  .nav-item.active { background: var(--orange-soft); color: var(--orange-dark); border-left-color: var(--orange); font-weight: 600; }
+  .nav-item.active.tf { background: var(--purple-soft); color: var(--purple); border-left-color: var(--purple); }
+  .nav-item .icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* MAIN */
+  .main { padding: 24px 28px 40px; overflow-y: auto; min-width: 0; }
+  .page-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+  .page-title { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .page-subtitle { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .filter-pill { background: var(--panel); border: 1px solid var(--border); padding: 6px 12px; border-radius: 4px; font-size: 12.5px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .filter-pill:hover { border-color: #C7CCD3; color: var(--text); }
+  .filter-pill.active { background: var(--orange-soft); border-color: var(--orange); color: var(--orange-dark); font-weight: 500; }
+  .search-input { background: var(--panel); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; font-size: 12.5px; min-width: 180px; outline: none; transition: border-color 0.15s; }
+  .search-input:focus { border-color: var(--purple); }
+
+  /* KPIS */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--orange); }
+  .kpi.green::before { background: var(--green); }
+  .kpi.red::before { background: var(--red); }
+  .kpi.amber::before { background: var(--amber); }
+  .kpi.purple::before { background: var(--purple); }
+  .kpi.blue::before { background: var(--blue); }
+  .kpi-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-subtle); font-weight: 600; }
+  .kpi-value { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 600; margin-top: 6px; letter-spacing: -0.02em; line-height: 1; }
+  .kpi-meta { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+
+  /* CHARTS / PANELS */
+  .charts { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
+  .panel-head { padding: 14px 18px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-weight: 600; font-size: 14px; }
+  .panel-body { padding: 18px; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* LIST (MRs e applies) */
+  .list-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); background: #FAFAFB; }
+  .list-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .badge-count { background: #E8EAEE; color: var(--text-muted); padding: 1px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; }
+  .order-by { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .order-by select { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .mr-list { max-height: 520px; overflow-y: auto; }
+  .mr-item { padding: 12px 18px; border-bottom: 1px solid #EEF0F3; cursor: pointer; display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; align-items: start; }
+  .mr-item:hover { background: #F8F9FB; }
+  .mr-item.selected { background: var(--orange-soft); }
+  .mr-item.selected.tf { background: var(--purple-soft); }
+  .mr-item:last-child { border-bottom: none; }
+  .mr-checkbox { width: 16px; height: 16px; border-radius: 3px; background: var(--blue); display: grid; place-items: center; margin-top: 2px; }
+  .mr-checkbox.tf { background: var(--purple); }
+  .mr-checkbox svg { width: 11px; height: 11px; color: white; }
+  .mr-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); font-weight: 500; }
+  .mr-id.tf { color: var(--purple); }
+  .mr-summary { font-size: 13.5px; color: var(--text); margin-top: 1px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .mr-meta { font-size: 11.5px; color: var(--text-subtle); margin-top: 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .status-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+  .status-approved { background: var(--green-soft); color: var(--green); }
+  .status-rejected { background: var(--red-soft); color: var(--red); }
+  .status-pending  { background: var(--amber-soft); color: var(--amber); }
+  .status-merged   { background: var(--blue-soft); color: var(--blue); }
+  .status-applied  { background: var(--purple-soft); color: var(--purple); }
+
+  /* DETAIL */
+  .detail { background: var(--panel); border-left: 1px solid var(--border); padding: 24px 22px; overflow-y: auto; }
+  .detail-empty { text-align: center; color: var(--text-subtle); padding-top: 80px; font-size: 13px; }
+  .detail-empty .ico { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 50%; background: var(--orange-soft); display: grid; place-items: center; color: var(--orange); }
+  .detail-empty .ico.tf { background: var(--purple-soft); color: var(--purple); }
+  .detail-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); font-weight: 500; background: var(--blue-soft); padding: 3px 8px; border-radius: 3px; display: inline-block; }
+  .detail-id.tf { color: var(--purple); background: var(--purple-soft); }
+  .detail-title { font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; line-height: 1.25; margin-top: 10px; letter-spacing: -0.01em; word-break: break-word; }
+  .detail-section { margin-top: 22px; }
+  .detail-section-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--text-subtle); margin-bottom: 8px; }
+  .detail-grid { display: grid; grid-template-columns: 95px 1fr; row-gap: 8px; column-gap: 10px; font-size: 13px; }
+  .detail-grid dt { color: var(--text-muted); }
+  .detail-grid dd { color: var(--text); font-weight: 500; word-break: break-word; }
+  .summary-box { background: #FAFAFB; border: 1px solid var(--border); border-left: 3px solid var(--orange); border-radius: 4px; padding: 12px 14px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+  .summary-box.tf { border-left-color: var(--purple); }
+  .detail-actions { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 7px 14px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: #B8BEC7; }
+  .btn-primary { background: var(--orange); color: white; border-color: var(--orange); }
+  .btn-primary:hover { background: var(--orange-dark); }
+  .btn-tf { background: var(--purple); color: white; border-color: var(--purple); }
+  .btn-tf:hover { filter: brightness(0.92); }
+
+  /* STATES */
+  .error-banner { background: var(--red-soft); border: 1px solid #F0C0C0; color: var(--red); padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .meta-line { font-size: 11.5px; color: var(--text-subtle); margin-bottom: 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .meta-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; }
+  .meta-line .dot.refreshing { background: var(--amber); animation: pulse 1.2s infinite; }
+  .meta-line .dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* TABS PRO USUARIO TROCAR ENTRE MR e TFE (alt do sidebar) */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* BRANCH FLOW (gitflow analysis) */
+  .env-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .env-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .env-card::before { content:''; position:absolute; top:0; left:0; height:100%; width:4px; }
+  .env-card.develop::before { background: var(--blue); }
+  .env-card.release::before { background: var(--amber); }
+  .env-card.master::before  { background: var(--green); }
+  .env-card-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-subtle); font-weight: 700; }
+  .env-card-name { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; margin-top: 2px; }
+  .env-card-value { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; margin-top: 6px; letter-spacing: -0.02em; }
+  .env-card-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+  .flow-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .flow-bar-seg { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: white; padding: 0 8px; transition: opacity 0.15s; }
+  .flow-bar-seg:hover { opacity: 0.85; cursor: default; }
+  .flow-bar-seg.expected { background: var(--green); }
+  .flow-bar-seg.hotfix   { background: var(--blue); }
+  .flow-bar-seg.skip-env { background: var(--amber); }
+  .flow-bar-seg.reverse  { background: #8B5A2B; }
+  .flow-bar-seg.unknown  { background: #6B7280; }
+  .flow-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--text-muted); }
+  .flow-legend-item { display: flex; align-items: center; gap: 5px; }
+  .flow-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+  .flow-legend-dot.expected { background: var(--green); }
+  .flow-legend-dot.hotfix   { background: var(--blue); }
+  .flow-legend-dot.skip-env { background: var(--amber); }
+  .flow-legend-dot.reverse  { background: #8B5A2B; }
+  .flow-legend-dot.unknown  { background: #6B7280; }
+
+  .branch-chip { display: inline-flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #F2F3F5; border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; color: var(--text); }
+  .branch-chip.develop { background: var(--blue-soft); border-color: #B8D2EE; color: var(--blue); }
+  .branch-chip.release { background: var(--amber-soft); border-color: #E8C879; color: var(--amber); }
+  .branch-chip.master  { background: var(--green-soft); border-color: #A8D8BD; color: var(--green); }
+  .branch-arrow { color: var(--text-subtle); font-size: 11px; }
+
+  .flow-cat-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+  .flow-cat-tag.expected { background: var(--green-soft); color: var(--green); }
+  .flow-cat-tag.hotfix   { background: var(--blue-soft); color: var(--blue); }
+  .flow-cat-tag.skip-env { background: var(--amber-soft); color: var(--amber); }
+  .flow-cat-tag.reverse  { background: #F4E4D4; color: #8B5A2B; }
+  .flow-cat-tag.unknown  { background: #E8EAEE; color: #6B7280; }
+
+  .transitions-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .transitions-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-subtle); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .transitions-table td { padding: 8px 12px; border-bottom: 1px solid #EEF0F3; }
+  .transitions-table tr:last-child td { border-bottom: none; }
+  .transitions-bar { height: 6px; background: #EEF0F3; border-radius: 3px; overflow: hidden; min-width: 60px; }
+  .transitions-bar-fill { height: 100%; background: var(--orange); border-radius: 3px; }
+
+  @media (max-width: 768px) { .env-grid { grid-template-columns: 1fr; } }
+
+  @media (max-width: 1200px) { .shell { grid-template-columns: 220px 1fr; } .detail { display: none; } .charts { grid-template-columns: 1fr; } }
+  @media (max-width: 768px) { .shell { grid-template-columns: 1fr; } .sidebar { display: none; } .kpis { grid-template-columns: repeat(2, 1fr); } .nav { display: none; } }
+  ::-webkit-scrollbar { width: 10px; } ::-webkit-scrollbar-thumb { background: #D4D8DE; border-radius: 5px; border: 2px solid var(--bg); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">M</div>
+    <span>MR Bot</span>
+  </div>
+  <nav class="nav">
+    <a href="#" class="active" data-tab="mrs">Merge Requests</a>
+    <a href="#" data-tab="tfe">Terraform Applies</a>
+  </nav>
+  <div class="topbar-actions">
+    <button class="btn-refresh" id="btnRefresh">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Atualizar
+    </button>
+    <div class="avatar">G</div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="project-header">
+      <div class="project-icon">DX</div>
+      <div>
+        <div class="project-name">Platform · DevEx</div>
+        <div class="project-sub">Automation</div>
+      </div>
+    </div>
+    <div class="nav-group" data-tab-nav="mrs">
+      <div class="nav-group-label">Merge Requests</div>
+      <div class="nav-item active" data-view="overview">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Overview
+      </div>
+      <div class="nav-item" data-view="approved">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        Approved
+      </div>
+      <div class="nav-item" data-view="rejected">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Rejected
+      </div>
+      <div class="nav-item" data-view="pending">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Pending Review
+      </div>
+      <div class="nav-item" data-view="all">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        All
+      </div>
+    </div>
+    <div class="nav-group" data-tab-nav="tfe" style="display:none">
+      <div class="nav-group-label">Terraform</div>
+      <div class="nav-item active tf" data-tfview="all">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        All Applies
+      </div>
+      <div class="nav-item tf" data-tfview="by-user">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        By User
+      </div>
+      <div class="nav-item tf" data-tfview="by-project">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/></svg>
+        By Project
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ════════════════════════ MERGE REQUESTS ════════════════════════ -->
+    <section class="section active" data-section="mrs">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Merge Request Insights</h1>
+          <p class="page-subtitle">Atividade do bot de revisão automática · DynamoDB</p>
+        </div>
+        <div class="filters">
+          <button class="filter-pill active" data-period="7">7 dias</button>
+          <button class="filter-pill" data-period="14">14 dias</button>
+          <button class="filter-pill" data-period="30">30 dias</button>
+          <button class="filter-pill" data-period="60">60 dias</button>
+        </div>
+      </div>
+
+      <div id="mrErrorSlot"></div>
+
+      <section class="kpis">
+        <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-meta">MRs processados</div></div>
+        <div class="kpi green"><div class="kpi-label">Aprovados</div><div class="kpi-value" id="kpi-approved">—</div><div class="kpi-meta" id="kpi-approved-pct">—</div></div>
+        <div class="kpi red"><div class="kpi-label">Rejeitados</div><div class="kpi-value" id="kpi-rejected">—</div><div class="kpi-meta" id="kpi-rejected-pct">—</div></div>
+        <div class="kpi amber"><div class="kpi-label">Pending Review</div><div class="kpi-value" id="kpi-pending">—</div><div class="kpi-meta" id="kpi-pending-pct">—</div></div>
+      </section>
+
+      <section class="charts">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Volume por dia</div><span class="badge-count" id="chartTotalLabel">—</span></div>
+          <div class="panel-body"><div class="chart-wrap"><canvas id="chartTimeline"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Top projetos</div><span class="badge-count" id="chartProjectsLabel">—</span></div>
+          <div class="panel-body"><div class="chart-wrap"><canvas id="chartProjects"></canvas></div></div>
+        </div>
+      </section>
+
+      <!-- ═════ BRANCH FLOW ANALYSIS (gitflow) ═════ -->
+      <section style="margin-bottom: 24px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+          <h2 style="font-family:'Fraunces',serif;font-size:18px;font-weight:600;letter-spacing:-0.01em">Branch Flow Analysis</h2>
+          <span style="font-size:12px;color:var(--text-subtle)">Conformidade com gitflow · develop → release → master</span>
+        </div>
+
+        <!-- Cards de ambiente -->
+        <div class="env-grid" style="margin-bottom: 14px;">
+          <div class="env-card develop">
+            <div class="env-card-label">Ambiente Baixo</div>
+            <div class="env-card-name">develop</div>
+            <div class="env-card-value" id="env-develop">—</div>
+            <div class="env-card-meta">Desenvolvimento</div>
+          </div>
+          <div class="env-card release">
+            <div class="env-card-label">Ambiente Upper</div>
+            <div class="env-card-name">release</div>
+            <div class="env-card-value" id="env-release">—</div>
+            <div class="env-card-meta">Certificação</div>
+          </div>
+          <div class="env-card master">
+            <div class="env-card-label">Produção</div>
+            <div class="env-card-name">master</div>
+            <div class="env-card-value" id="env-master">—</div>
+            <div class="env-card-meta">Production</div>
+          </div>
+        </div>
+
+        <div class="charts" style="grid-template-columns: 1fr 1fr;">
+          <!-- Distribuição por categoria de fluxo -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">Distribuição por categoria</div>
+              <span class="badge-count" id="flowTotalLabel">—</span>
+            </div>
+            <div class="panel-body">
+              <div class="flow-bar" id="flowBar"></div>
+              <div class="flow-legend">
+                <div class="flow-legend-item"><span class="flow-legend-dot expected"></span>Expected</div>
+                <div class="flow-legend-item"><span class="flow-legend-dot hotfix"></span>Hotfix</div>
+                <div class="flow-legend-item"><span class="flow-legend-dot skip-env"></span>Skip-env</div>
+                <div class="flow-legend-item"><span class="flow-legend-dot reverse"></span>Reverse</div>
+                <div class="flow-legend-item"><span class="flow-legend-dot unknown"></span>Unknown</div>
+              </div>
+              <div id="flowInconsistencyAlert" style="margin-top:14px"></div>
+            </div>
+          </div>
+
+          <!-- Top transições -->
+          <div class="panel">
+            <div class="panel-head">
+              <div class="panel-title">Top transições source → target</div>
+            </div>
+            <div class="panel-body" style="padding: 0;">
+              <table class="transitions-table" id="transitionsTable">
+                <thead><tr><th>Transição</th><th style="text-align:right">Qtd</th><th style="width:120px"></th></tr></thead>
+                <tbody><tr><td colspan="3" style="text-align:center;color:var(--text-subtle);padding:24px">Carregando…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="panel">
+        <div class="list-head">
+          <div class="list-title">Open issues <span class="badge-count" id="listCount">0</span></div>
+          <div class="order-by">Order by
+            <select id="orderBy">
+              <option value="updated_at">Last updated</option>
+              <option value="created_at">Created date</option>
+              <option value="status">Status</option>
+              <option value="project_name">Project</option>
+            </select>
+          </div>
+        </div>
+        <div class="mr-list" id="mrList"><div style="padding:40px;text-align:center;color:var(--text-subtle)">Carregando…</div></div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ TERRAFORM APPLIES ════════════════════════ -->
+    <section class="section" data-section="tfe">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Terraform Applies</h1>
+          <p class="page-subtitle">Runs aplicados nos últimos dias · Terraform Enterprise</p>
+        </div>
+        <div class="filters">
+          <input type="text" class="search-input" id="tfeSearchUser" placeholder="Filtrar por user…" />
+          <input type="text" class="search-input" id="tfeSearchProject" placeholder="Filtrar por project…" />
+        </div>
+      </div>
+
+      <div class="meta-line" id="tfeMetaLine">
+        <span class="dot"></span>
+        <span id="tfeMetaText">Carregando…</span>
+      </div>
+
+      <div id="tfeErrorSlot"></div>
+
+      <section class="kpis">
+        <div class="kpi purple"><div class="kpi-label">Total Applies</div><div class="kpi-value" id="tfe-total">—</div><div class="kpi-meta" id="tfe-window">—</div></div>
+        <div class="kpi blue"><div class="kpi-label">Workspaces</div><div class="kpi-value" id="tfe-ws">—</div><div class="kpi-meta">monitorados</div></div>
+        <div class="kpi green"><div class="kpi-label">Usuários únicos</div><div class="kpi-value" id="tfe-users">—</div><div class="kpi-meta">aplicando mudanças</div></div>
+        <div class="kpi amber"><div class="kpi-label">Projetos</div><div class="kpi-value" id="tfe-projects">—</div><div class="kpi-meta">com atividade</div></div>
+      </section>
+
+      <section class="charts">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Top usuários</div><span class="badge-count" id="tfeUsersLabel">—</span></div>
+          <div class="panel-body"><div class="chart-wrap"><canvas id="chartUsers"></canvas></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Por origem</div><span class="badge-count" id="tfeSourceLabel">—</span></div>
+          <div class="panel-body"><div class="chart-wrap"><canvas id="chartSource"></canvas></div></div>
+        </div>
+      </section>
+
+      <div class="panel">
+        <div class="list-head">
+          <div class="list-title">Recent applies <span class="badge-count" id="tfeListCount">0</span></div>
+          <div class="order-by">Order by
+            <select id="tfeOrderBy">
+              <option value="created_at">Most recent</option>
+              <option value="user">User</option>
+              <option value="project_name">Project</option>
+              <option value="workspace_name">Workspace</option>
+            </select>
+          </div>
+        </div>
+        <div class="mr-list" id="tfeList"><div style="padding:40px;text-align:center;color:var(--text-subtle)">Carregando…</div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <aside class="detail" id="detailPanel">
+    <div class="detail-empty">
+      <div class="ico">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg>
+      </div>
+      <div>Selecione um item</div>
+      <div style="font-size:12px;margin-top:4px">para ver os detalhes</div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   CONFIG
+   ═══════════════════════════════════════════════════════════════════ */
+const API_BASE = '';
+const MR_PATH = '/api/dashboard';
+const TFE_PATH = '/api/applies';
+
+const state = {
+  tab: 'mrs',                    // 'mrs' | 'tfe'
+  // ── MRs ──
+  mrData: null, mrFiltered: [], mrSelected: null, mrView: 'overview', mrPeriod: '7', mrOrderBy: 'updated_at',
+  // ── TFE ──
+  tfeData: null, tfeFiltered: [], tfeSelected: null, tfeView: 'all', tfeOrderBy: 'created_at',
+  // charts
+  charts: { timeline: null, projects: null, users: null, source: null },
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════════════════════════════ */
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function trunc(s,n){s=s??'';return s.length>n?s.slice(0,n)+'…':s;}
+function formatDate(iso){if(!iso)return'—';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}
+function timeAgo(iso){if(!iso)return'—';const ms=Date.now()-new Date(iso).getTime();const m=Math.floor(ms/60000);if(m<1)return'agora';if(m<60)return`há ${m}m`;const h=Math.floor(m/60);if(h<24)return`há ${h}h`;return`há ${Math.floor(h/24)}d`;}
+function statusClass(s){s=(s||'').toLowerCase();if(s.includes('approv'))return'status-approved';if(s.includes('reject'))return'status-rejected';if(s.includes('pend')||s.includes('review'))return'status-pending';if(s.includes('merg'))return'status-merged';if(s.includes('appli'))return'status-applied';return'status-pending';}
+
+/* ═══════════════════════════════════════════════════════════════════
+   API
+   ═══════════════════════════════════════════════════════════════════ */
+async function api(path) {
+  const r = await fetch(`${API_BASE}${path}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MERGE REQUESTS (mantido do dashboard original)
+   ═══════════════════════════════════════════════════════════════════ */
+function renderMrKPIs(s) {
+  const t = s.total || 0; const pct = n => t ? Math.round(n/t*100)+'%' : '0%';
+  document.getElementById('kpi-total').textContent = t;
+  document.getElementById('kpi-approved').textContent = s.by_status?.approved ?? 0;
+  document.getElementById('kpi-rejected').textContent = s.by_status?.rejected ?? 0;
+  document.getElementById('kpi-pending').textContent = s.by_status?.pending ?? 0;
+  document.getElementById('kpi-approved-pct').textContent = pct(s.by_status?.approved ?? 0) + ' do total';
+  document.getElementById('kpi-rejected-pct').textContent = pct(s.by_status?.rejected ?? 0) + ' do total';
+  document.getElementById('kpi-pending-pct').textContent = pct(s.by_status?.pending ?? 0) + ' aguardando';
+}
+
+function renderTimeline(tl = []) {
+  const ctx = document.getElementById('chartTimeline').getContext('2d');
+  if (state.charts.timeline) state.charts.timeline.destroy();
+  document.getElementById('chartTotalLabel').textContent = tl.reduce((s,d)=>s+(d.total||0),0)+' MRs';
+  state.charts.timeline = new Chart(ctx, {
+    type: 'line',
+    data: { labels: tl.map(d=>d.date), datasets: [
+      {label:'Aprovados',data:tl.map(d=>d.approved||0),borderColor:'#2E7D5B',backgroundColor:'rgba(46,125,91,0.08)',tension:0.35,fill:true,borderWidth:2,pointRadius:0},
+      {label:'Rejeitados',data:tl.map(d=>d.rejected||0),borderColor:'#C63838',backgroundColor:'rgba(198,56,56,0.06)',tension:0.35,fill:true,borderWidth:2,pointRadius:0},
+      {label:'Pendentes',data:tl.map(d=>d.pending||0),borderColor:'#B5751F',backgroundColor:'rgba(181,117,31,0.05)',tension:0.35,fill:true,borderWidth:2,pointRadius:0},
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',align:'start',labels:{boxWidth:8,boxHeight:8,usePointStyle:true,pointStyle:'circle',font:{size:11.5}}},
+        tooltip:{backgroundColor:'rgba(27,31,38,0.95)',titleFont:{size:12,weight:'600'},bodyFont:{size:12},padding:10,cornerRadius:6}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:11},color:'#8C95A1'}},y:{beginAtZero:true,grid:{color:'#EEF0F3'},ticks:{font:{size:11},color:'#8C95A1',precision:0}}}
+    }
+  });
+}
+
+function renderMrProjects(proj = []) {
+  const ctx = document.getElementById('chartProjects').getContext('2d');
+  if (state.charts.projects) state.charts.projects.destroy();
+  const top = proj.slice(0,6);
+  document.getElementById('chartProjectsLabel').textContent = proj.length+' projetos';
+  state.charts.projects = new Chart(ctx, {
+    type:'bar',
+    data:{labels:top.map(p=>p.project_name?.length>22?p.project_name.slice(0,22)+'…':p.project_name),
+      datasets:[{data:top.map(p=>p.count),backgroundColor:'#DE5B14',borderRadius:4,barThickness:18}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(27,31,38,0.95)',callbacks:{label:c=>`${c.parsed.x} MRs`},padding:10,cornerRadius:6}},
+      scales:{x:{beginAtZero:true,grid:{color:'#EEF0F3'},ticks:{font:{size:11},color:'#8C95A1',precision:0}},y:{grid:{display:false},ticks:{font:{size:11.5}}}}}
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BRANCH FLOW (gitflow analysis)
+   ═══════════════════════════════════════════════════════════════════ */
+function branchKind(name) {
+  if (!name) return 'other';
+  const n = name.trim().toLowerCase();
+  if (n === 'master' || n === 'main') return 'master';
+  if (n === 'develop') return 'develop';
+  if (n === 'release' || n.startsWith('release/') || /^release[-/].+/.test(n)) return 'release';
+  if (n.startsWith('feature/') || /^feat(ure)?[-/].+/.test(n)) return 'feature';
+  if (n.startsWith('hotfix/') || /^hotfix[-/].+/.test(n)) return 'hotfix';
+  if (n.startsWith('bugfix/') || /^bugfix[-/].+/.test(n)) return 'bugfix';
+  return 'other';
+}
+
+function branchChipClass(name) {
+  const k = branchKind(name);
+  if (k === 'develop') return 'develop';
+  if (k === 'release') return 'release';
+  if (k === 'master')  return 'master';
+  return '';
+}
+
+function classifyFlow(source, target) {
+  const s = branchKind(source), t = branchKind(target);
+  const expected = new Set([
+    'feature|develop','bugfix|develop','develop|release',
+    'release|master','release|develop','master|develop'
+  ]);
+  if (expected.has(`${s}|${t}`)) return 'expected';
+  if ((s === 'hotfix' || s === 'bugfix') && (t === 'master' || t === 'release')) return 'hotfix';
+  if ((s === 'feature' || s === 'develop') && t === 'master') return 'skip-env';
+  if (s === 'feature' && t === 'release') return 'skip-env';
+  const lvl = { develop:1, release:2, master:3 };
+  if (lvl[s] && lvl[t] && lvl[t] < lvl[s] && !expected.has(`${s}|${t}`)) return 'reverse';
+  return 'unknown';
+}
+
+function renderBranchFlow(analysis) {
+  if (!analysis) return;
+
+  // Cards de ambiente
+  const env = analysis.by_target_env || {};
+  const total = (env.develop || 0) + (env.release || 0) + (env.master || 0);
+  const pct = n => total ? Math.round(n/total*100) + '%' : '—';
+  document.getElementById('env-develop').textContent = env.develop ?? 0;
+  document.getElementById('env-release').textContent = env.release ?? 0;
+  document.getElementById('env-master').textContent  = env.master  ?? 0;
+  document.querySelector('.env-card.develop .env-card-meta').textContent = `Desenvolvimento · ${pct(env.develop||0)}`;
+  document.querySelector('.env-card.release .env-card-meta').textContent = `Certificação · ${pct(env.release||0)}`;
+  document.querySelector('.env-card.master .env-card-meta').textContent  = `Production · ${pct(env.master||0)}`;
+
+  // Flow bar (stacked horizontal)
+  const cat = analysis.by_flow_category || {};
+  const catTotal = Object.values(cat).reduce((a,b)=>a+b,0);
+  document.getElementById('flowTotalLabel').textContent = catTotal + ' classificados';
+  const order = ['expected','hotfix','skip-env','reverse','unknown'];
+  const bar = document.getElementById('flowBar');
+  if (catTotal === 0) {
+    bar.innerHTML = '<div style="flex:1;display:grid;place-items:center;color:var(--text-subtle);font-size:12px;background:#FAFAFB">sem dados</div>';
+  } else {
+    bar.innerHTML = order.filter(k => (cat[k]||0) > 0).map(k => {
+      const v = cat[k] || 0;
+      const w = (v / catTotal) * 100;
+      const showLabel = w > 6;
+      return `<div class="flow-bar-seg ${k}" style="width:${w}%" title="${k}: ${v} (${Math.round(w)}%)">${showLabel ? v : ''}</div>`;
+    }).join('');
+  }
+
+  // Alerta de inconsistências
+  const inc = analysis.inconsistencies_total || 0;
+  const alert = document.getElementById('flowInconsistencyAlert');
+  if (inc > 0) {
+    const pctInc = catTotal ? Math.round(inc/catTotal*100) : 0;
+    alert.innerHTML = `
+      <div style="background:#FFF6E5;border:1px solid #E8C879;border-left:3px solid #B5751F;padding:10px 12px;border-radius:4px;font-size:12.5px;display:flex;align-items:center;gap:8px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B5751F" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span><strong>${inc} inconsistência${inc===1?'':'s'}</strong> detectada${inc===1?'':'s'} (${pctInc}%) — skip-env, reverse ou padrão desconhecido. Filtre a lista abaixo pra investigar.</span>
+        <button class="btn" style="margin-left:auto;padding:4px 10px;font-size:11.5px" onclick="filterByFlow('inconsistencies')">Filtrar</button>
+      </div>`;
+  } else if (catTotal > 0) {
+    alert.innerHTML = `<div style="color:var(--green);font-size:12.5px;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Todos os MRs seguem o gitflow esperado</div>`;
+  } else {
+    alert.innerHTML = '';
+  }
+
+  // Top transições
+  const transitions = analysis.top_transitions || [];
+  const max = transitions[0]?.count || 1;
+  const tbody = document.querySelector('#transitionsTable tbody');
+  if (transitions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-subtle);padding:24px">Sem dados de transição</td></tr>';
+  } else {
+    tbody.innerHTML = transitions.map(t => {
+      const [src, tgt] = t.transition.split(' → ');
+      const cat = classifyFlow(src === 'feature' ? 'feature/x' : src, tgt === 'release' ? 'release/x' : tgt);
+      return `
+        <tr>
+          <td>
+            <span class="branch-chip ${branchChipClass(src)}">${esc(src)}</span>
+            <span class="branch-arrow">→</span>
+            <span class="branch-chip ${branchChipClass(tgt)}">${esc(tgt)}</span>
+            <span class="flow-cat-tag ${cat}" style="margin-left:6px">${cat}</span>
+          </td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-weight:500">${t.count}</td>
+          <td><div class="transitions-bar"><div class="transitions-bar-fill" style="width:${(t.count/max*100)}%"></div></div></td>
+        </tr>`;
+    }).join('');
+  }
+}
+
+// Filtro especial: aplica filtro client-side mostrando apenas MRs com flow ruim
+function filterByFlow(kind) {
+  if (kind === 'inconsistencies' && state.mrData) {
+    state.mrView = 'inconsistencies';
+    document.querySelectorAll('[data-view]').forEach(n=>n.classList.remove('active'));
+    renderMrList(state.mrData.items||[]);
+    // scroll pra lista
+    document.getElementById('mrList').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}
+
+function applyMrView(items) {
+  let o = items.slice();
+  if(state.mrView==='approved')o=o.filter(i=>statusClass(i.status)==='status-approved');
+  if(state.mrView==='rejected')o=o.filter(i=>statusClass(i.status)==='status-rejected');
+  if(state.mrView==='pending')o=o.filter(i=>statusClass(i.status)==='status-pending');
+  if(state.mrView==='inconsistencies') {
+    o = o.filter(i => {
+      if (!i.source_branch || !i.target_branch) return false;
+      const cat = classifyFlow(i.source_branch, i.target_branch);
+      return cat === 'skip-env' || cat === 'reverse' || cat === 'unknown';
+    });
+  }
+  return o;
+}
+function applyMrOrder(items) {
+  const k=state.mrOrderBy;
+  return items.slice().sort((a,b)=>{if(k==='created_at'||k==='updated_at')return new Date(b[k]||0)-new Date(a[k]||0);return String(a[k]??'').localeCompare(String(b[k]??''));});
+}
+
+function renderMrList(items) {
+  const filtered = applyMrOrder(applyMrView(items));
+  state.mrFiltered = filtered;
+  document.getElementById('listCount').textContent = filtered.length;
+  const list = document.getElementById('mrList');
+  if(!filtered.length){list.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-subtle)">Nenhum MR.</div>';return;}
+  list.innerHTML = filtered.map(it=>{
+    const hasFlow = it.source_branch && it.target_branch;
+    const flowCat = hasFlow ? classifyFlow(it.source_branch, it.target_branch) : null;
+    const flowHtml = hasFlow ? `
+      <span class="branch-chip ${branchChipClass(it.source_branch)}" title="${esc(it.source_branch)}">${esc(trunc(it.source_branch, 18))}</span>
+      <span class="branch-arrow">→</span>
+      <span class="branch-chip ${branchChipClass(it.target_branch)}" title="${esc(it.target_branch)}">${esc(trunc(it.target_branch, 18))}</span>
+      ${flowCat && flowCat !== 'expected' ? `<span class="flow-cat-tag ${flowCat}">${flowCat}</span>` : ''}
+    ` : '';
+    return `
+    <div class="mr-item${state.mrSelected===it.sk?' selected':''}" data-sk="${esc(it.sk)}">
+      <div class="mr-checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div>
+        <span class="mr-id">${esc(it.project_name||'—')} · MR !${esc(String(it.mr_iid||''))}</span>
+        <div class="mr-summary">${esc(trunc(it.agent_summary,90)||'(sem resumo)')}</div>
+        <div class="mr-meta">
+          ${flowHtml}
+          <span>${formatDate(it.updated_at||it.created_at)}</span>
+        </div>
+      </div>
+      <span class="status-tag ${statusClass(it.status)}">${esc((it.status||'pending').toUpperCase())}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.mr-item').forEach(el=>el.addEventListener('click',()=>{
+    state.mrSelected=el.dataset.sk;
+    list.querySelectorAll('.mr-item').forEach(n=>n.classList.remove('selected'));
+    el.classList.add('selected');
+    renderMrDetail(filtered.find(i=>i.sk===el.dataset.sk));
+  }));
+}
+
+function renderMrDetail(item) {
+  const p = document.getElementById('detailPanel');
+  if(!item){p.innerHTML=emptyDetail('mr');return;}
+  const cls = statusClass(item.status);
+  const hasFlow = item.source_branch && item.target_branch;
+  const flowCat = hasFlow ? classifyFlow(item.source_branch, item.target_branch) : null;
+  const flowSection = hasFlow ? `
+    <div class="detail-section">
+      <div class="detail-section-label">Branch Flow</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <span class="branch-chip ${branchChipClass(item.source_branch)}">${esc(item.source_branch)}</span>
+        <span class="branch-arrow" style="font-size:14px">→</span>
+        <span class="branch-chip ${branchChipClass(item.target_branch)}">${esc(item.target_branch)}</span>
+      </div>
+      <span class="flow-cat-tag ${flowCat}">${flowCat}</span>
+      ${flowCat !== 'expected' && flowCat !== 'hotfix' ? `
+        <div style="margin-top:10px;font-size:12px;color:var(--text-muted);line-height:1.5">
+          ${flowCat === 'skip-env' ? '⚠️ Esta MR pula um ambiente intermediário do gitflow.' : ''}
+          ${flowCat === 'reverse' ? '⚠️ Transição reversa: target em ambiente inferior ao source.' : ''}
+          ${flowCat === 'unknown' ? '⚠️ Padrão de branch fora do gitflow esperado.' : ''}
+        </div>` : ''}
+    </div>` : '';
+  p.innerHTML = `
+    <span class="detail-id">MR !${esc(String(item.mr_iid||''))}</span>
+    <span class="status-tag ${cls}" style="margin-left:6px">${esc((item.status||'pending').toUpperCase())}</span>
+    <h2 class="detail-title">${esc(item.project_name||'Merge Request')}</h2>
+    <div class="detail-actions">
+      ${item.mr_url?`<a class="btn btn-primary" href="${esc(item.mr_url)}" target="_blank" rel="noopener">Abrir MR</a>`:''}
+    </div>
+    ${flowSection}
+    <div class="detail-section">
+      <div class="detail-section-label">Details</div>
+      <dl class="detail-grid">
+        <dt>Project</dt><dd>${esc(item.project_name||'—')}</dd>
+        <dt>Project ID</dt><dd>${esc(String(item.project_id||'—'))}</dd>
+        <dt>MR IID</dt><dd>!${esc(String(item.mr_iid||'—'))}</dd>
+        <dt>Source</dt><dd>${esc(item.source_branch||'—')}</dd>
+        <dt>Target</dt><dd>${esc(item.target_branch||'—')}</dd>
+        <dt>Status</dt><dd>${esc(item.status||'—')}</dd>
+        <dt>Merged</dt><dd>${(item.merged===true||item.merged==='true')?'Sim':'Não'}</dd>
+        <dt>Created</dt><dd>${formatDate(item.created_at)}</dd>
+        <dt>Updated</dt><dd>${formatDate(item.updated_at)}</dd>
+      </dl>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-label">Agent Summary</div>
+      <div class="summary-box">${esc(item.agent_summary||'(sem resumo)')}</div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TERRAFORM APPLIES
+   ═══════════════════════════════════════════════════════════════════ */
+function renderTfeKPIs(data) {
+  const stats = data.stats || {};
+  const meta = data.meta || {};
+  document.getElementById('tfe-total').textContent = stats.total || 0;
+  document.getElementById('tfe-window').textContent = `Últimos ${meta.config?.lookback_days||'?'} dias`;
+  document.getElementById('tfe-ws').textContent = meta.workspaces_count || 0;
+  document.getElementById('tfe-users').textContent = (stats.by_user||[]).length;
+  document.getElementById('tfe-projects').textContent = (stats.by_project||[]).length;
+}
+
+function renderTfeUsers(byUser = []) {
+  const ctx = document.getElementById('chartUsers').getContext('2d');
+  if (state.charts.users) state.charts.users.destroy();
+  const top = byUser.slice(0, 8);
+  document.getElementById('tfeUsersLabel').textContent = byUser.length+' users';
+  state.charts.users = new Chart(ctx, {
+    type:'bar',
+    data:{labels:top.map(u=>u.name?.length>22?u.name.slice(0,22)+'…':u.name),
+      datasets:[{data:top.map(u=>u.count),backgroundColor:'#5C4FB8',borderRadius:4,barThickness:16}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(27,31,38,0.95)',callbacks:{label:c=>`${c.parsed.x} applies`},padding:10,cornerRadius:6}},
+      scales:{x:{beginAtZero:true,grid:{color:'#EEF0F3'},ticks:{font:{size:11},color:'#8C95A1',precision:0}},y:{grid:{display:false},ticks:{font:{size:11.5}}}}}
+  });
+}
+
+function renderTfeSource(bySource = []) {
+  const ctx = document.getElementById('chartSource').getContext('2d');
+  if (state.charts.source) state.charts.source.destroy();
+  document.getElementById('tfeSourceLabel').textContent = bySource.length+' fontes';
+  const palette = ['#5C4FB8','#DE5B14','#2563A8','#2E7D5B','#B5751F','#C63838'];
+  state.charts.source = new Chart(ctx, {
+    type:'doughnut',
+    data:{labels:bySource.map(s=>s.name),
+      datasets:[{data:bySource.map(s=>s.count),backgroundColor:bySource.map((_,i)=>palette[i%palette.length]),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      plugins:{legend:{position:'right',labels:{boxWidth:10,boxHeight:10,font:{size:11.5},padding:10}},
+        tooltip:{backgroundColor:'rgba(27,31,38,0.95)',callbacks:{label:c=>`${c.label}: ${c.parsed} (${Math.round(c.parsed/c.dataset.data.reduce((a,b)=>a+b,0)*100)}%)`},padding:10,cornerRadius:6}}}
+  });
+}
+
+function applyTfeFilters(items) {
+  const userQ = document.getElementById('tfeSearchUser').value.toLowerCase().trim();
+  const projQ = document.getElementById('tfeSearchProject').value.toLowerCase().trim();
+  let o = items.slice();
+  if(userQ) o = o.filter(a=>a.user.toLowerCase().includes(userQ));
+  if(projQ) o = o.filter(a=>a.project_name.toLowerCase().includes(projQ));
+  return o;
+}
+
+function applyTfeOrder(items) {
+  const k = state.tfeOrderBy;
+  return items.slice().sort((a,b)=>{
+    if(k==='created_at') return new Date(b.created_at)-new Date(a.created_at);
+    return String(a[k]??'').localeCompare(String(b[k]??''));
+  });
+}
+
+function renderTfeList(items) {
+  const filtered = applyTfeOrder(applyTfeFilters(items));
+  state.tfeFiltered = filtered;
+  document.getElementById('tfeListCount').textContent = filtered.length;
+  const list = document.getElementById('tfeList');
+  if(!filtered.length){list.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-subtle)">Nenhum apply encontrado.</div>';return;}
+  list.innerHTML = filtered.map(a=>`
+    <div class="mr-item${state.tfeSelected===a.run_id?' selected tf':''}" data-runid="${esc(a.run_id)}">
+      <div class="mr-checkbox tf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div>
+        <span class="mr-id tf">${esc(a.workspace_name)}</span>
+        <div class="mr-summary">${esc(a.message ? trunc(a.message,90) : '(sem mensagem)')}</div>
+        <div class="mr-meta">
+          <span>${esc(a.user)}</span><span>·</span>
+          <span>${esc(a.project_name)}</span><span>·</span>
+          <span title="${esc(a.created_at)}">${timeAgo(a.created_at)}</span><span>·</span>
+          <span>${esc(a.source)}</span>
+        </div>
+      </div>
+      <span class="status-tag status-applied">APPLIED</span>
+    </div>`).join('');
+  list.querySelectorAll('.mr-item').forEach(el=>el.addEventListener('click',()=>{
+    state.tfeSelected = el.dataset.runid;
+    list.querySelectorAll('.mr-item').forEach(n=>n.classList.remove('selected','tf'));
+    el.classList.add('selected','tf');
+    renderTfeDetail(filtered.find(a=>a.run_id===el.dataset.runid));
+  }));
+}
+
+function renderTfeDetail(a) {
+  const p = document.getElementById('detailPanel');
+  if(!a){p.innerHTML=emptyDetail('tfe');return;}
+  p.innerHTML = `
+    <span class="detail-id tf">${esc(a.run_id)}</span>
+    <span class="status-tag status-applied" style="margin-left:6px">APPLIED</span>
+    <h2 class="detail-title">${esc(a.workspace_name)}</h2>
+    <div class="detail-section">
+      <div class="detail-section-label">Run details</div>
+      <dl class="detail-grid">
+        <dt>User</dt><dd>${esc(a.user)}</dd>
+        <dt>Project</dt><dd>${esc(a.project_name)}</dd>
+        <dt>Workspace</dt><dd>${esc(a.workspace_name)}</dd>
+        <dt>Source</dt><dd>${esc(a.source)}</dd>
+        <dt>Has changes</dt><dd>${a.has_changes ? 'Sim' : 'Não'}</dd>
+        <dt>Created</dt><dd>${formatDate(a.created_at)} <span style="color:var(--text-subtle)">(${timeAgo(a.created_at)})</span></dd>
+      </dl>
+    </div>
+    ${a.message ? `
+    <div class="detail-section">
+      <div class="detail-section-label">Commit message</div>
+      <div class="summary-box tf">${esc(a.message)}</div>
+    </div>` : ''}
+    <div class="detail-section">
+      <div class="detail-section-label">Identifiers</div>
+      <dl class="detail-grid">
+        <dt>Run ID</dt><dd style="font-family:'JetBrains Mono',monospace;font-size:11.5px">${esc(a.run_id)}</dd>
+        <dt>Workspace ID</dt><dd style="font-family:'JetBrains Mono',monospace;font-size:11.5px">${esc(a.workspace_id)}</dd>
+        <dt>Project ID</dt><dd style="font-family:'JetBrains Mono',monospace;font-size:11.5px">${esc(a.project_id)}</dd>
+      </dl>
+    </div>`;
+}
+
+function renderTfeMeta(meta) {
+  const dot = document.querySelector('#tfeMetaLine .dot');
+  const text = document.getElementById('tfeMetaText');
+  dot.className = 'dot';
+  if (meta.last_error) {
+    dot.classList.add('error');
+    text.textContent = `Erro no último refresh: ${meta.last_error}`;
+  } else if (meta.refreshing) {
+    dot.classList.add('refreshing');
+    text.textContent = `Atualizando dados do TFE...`;
+  } else if (meta.last_refresh) {
+    text.textContent = `Última sync: ${formatDate(meta.last_refresh)} · auto-refresh a cada ${Math.round((meta.config?.refresh_interval_seconds||300)/60)}min`;
+  } else {
+    text.textContent = 'Aguardando primeira sync…';
+  }
+}
+
+function emptyDetail(kind) {
+  return `<div class="detail-empty"><div class="ico${kind==='tfe'?' tf':''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 15V9a3 3 0 0 1 3-3h6"/></svg></div><div>Selecione um item</div><div style="font-size:12px;margin-top:4px">para ver os detalhes</div></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LOADERS
+   ═══════════════════════════════════════════════════════════════════ */
+async function loadMRs() {
+  document.getElementById('mrErrorSlot').innerHTML = '';
+  try {
+    const data = await api(`${MR_PATH}?period=${state.mrPeriod}`);
+    state.mrData = data;
+    renderMrKPIs(data.stats||{});
+    renderTimeline(data.timeline||[]);
+    renderMrProjects(data.top_projects||[]);
+    renderBranchFlow(data.branch_analysis);
+    renderMrList(data.items||[]);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('mrErrorSlot').innerHTML = `<div class="error-banner">Falha ao carregar MRs: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadTFE() {
+  document.getElementById('tfeErrorSlot').innerHTML = '';
+  try {
+    const data = await api(TFE_PATH);
+    state.tfeData = data;
+    renderTfeMeta(data.meta||{});
+    renderTfeKPIs(data);
+    renderTfeUsers(data.stats?.by_user||[]);
+    renderTfeSource(data.stats?.by_source||[]);
+    renderTfeList(data.applies||[]);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('tfeErrorSlot').innerHTML = `<div class="error-banner">Falha ao carregar applies: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadAll() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  try { await Promise.all([loadMRs(), loadTFE()]); }
+  finally { btn.disabled = false; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TAB SWITCHING
+   ═══════════════════════════════════════════════════════════════════ */
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.nav a[data-tab]').forEach(a=>a.classList.toggle('active', a.dataset.tab===tab));
+  document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active', s.dataset.section===tab));
+  document.querySelectorAll('[data-tab-nav]').forEach(g=>g.style.display = g.dataset.tabNav===tab ? '' : 'none');
+  // detail panel volta ao vazio quando troca de aba
+  document.getElementById('detailPanel').innerHTML = emptyDetail(tab==='tfe'?'tfe':'mr');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EVENTS
+   ═══════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('.nav a[data-tab]').forEach(a=>a.addEventListener('click',e=>{
+  e.preventDefault(); switchTab(a.dataset.tab);
+}));
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
+
+// MR events
+document.querySelectorAll('.filter-pill').forEach(p=>p.addEventListener('click',()=>{
+  document.querySelectorAll('.filter-pill').forEach(x=>x.classList.remove('active'));
+  p.classList.add('active'); state.mrPeriod=p.dataset.period; loadMRs();
+}));
+document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('[data-view]').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active'); state.mrView=el.dataset.view;
+  if(state.mrData) renderMrList(state.mrData.items||[]);
+}));
+document.getElementById('orderBy').addEventListener('change',e=>{state.mrOrderBy=e.target.value;if(state.mrData)renderMrList(state.mrData.items||[]);});
+
+// TFE events
+document.querySelectorAll('[data-tfview]').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('[data-tfview]').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active'); state.tfeView=el.dataset.tfview;
+  if(state.tfeData){
+    if(state.tfeView==='by-user') state.tfeOrderBy='user';
+    else if(state.tfeView==='by-project') state.tfeOrderBy='project_name';
+    else state.tfeOrderBy='created_at';
+    document.getElementById('tfeOrderBy').value = state.tfeOrderBy;
+    renderTfeList(state.tfeData.applies||[]);
+  }
+}));
+document.getElementById('tfeOrderBy').addEventListener('change',e=>{state.tfeOrderBy=e.target.value;if(state.tfeData)renderTfeList(state.tfeData.applies||[]);});
+['tfeSearchUser','tfeSearchProject'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>{if(state.tfeData)renderTfeList(state.tfeData.applies||[]);});
+});
+
+// auto-refresh do TFE a cada 60s (cache no backend é a cada 5min, mas refresca UI mais frequentemente)
+setInterval(() => { if (state.tab === 'tfe') loadTFE(); }, 60000);
+
+loadAll();
+</script>
+</body>
+</html>

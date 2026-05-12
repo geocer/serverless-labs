@@ -1,0 +1,286 @@
+# ═══════════════════════════════════════════════════════════════════
+# mr-dashboard — Kubernetes Manifests
+# Ajuste os campos marcados com  <CHANGE_ME>  antes de aplicar
+# ═══════════════════════════════════════════════════════════════════
+
+---
+# ── 1. Namespace ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mr-dashboard
+  labels:
+    app.kubernetes.io/name: mr-dashboard
+    environment: production
+
+---
+# ── 2. ConfigMap — variáveis não-sensíveis ──────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mr-dashboard-config
+  namespace: mr-dashboard
+data:
+  # ── API Gateway (Merge Requests) ────────────────────────────────────────
+  API_GATEWAY_URL: "https://5su5qmyoqc.execute-api.sa-east-1.amazonaws.com/prod"
+  PORT: "8080"
+  LOG_LEVEL: "INFO"
+  GUNICORN_WORKERS: "2"
+  GUNICORN_THREADS: "4"
+  PROXY_TIMEOUT: "30"
+
+  # ── Terraform Enterprise ────────────────────────────────────────────────
+  TFE_HOSTNAME: "https://tfe.fisv.cloud"          # <CHANGE_ME>
+  TFE_ORGANIZATION: "main"                        # <CHANGE_ME>
+  TFE_PROJECT_PREFIX: "test"                      # filtro: nome do projeto começa com
+  TFE_WS_PREFIX: "test-"                          # filtro: workspace começa com
+  TFE_WS_SUFFIXES: "-test,-te,-tt"                # filtro: workspace termina com (csv)
+  TFE_LOOKBACK_DAYS: "10"                         # janela de runs a buscar
+  TFE_REFRESH_INTERVAL: "300"                     # refresh do cache em segundos (5min)
+  TFE_HTTP_TIMEOUT: "30"
+
+---
+# ── 3. Secret — credenciais sensíveis (se necessário) ──────────────────────
+# Se a Lambda exigir x-api-key, coloque aqui.
+# Encode em base64: echo -n 'valor' | base64
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mr-dashboard-secret
+  namespace: mr-dashboard
+type: Opaque
+data:
+  # Token do Terraform Enterprise (obrigatório pra aba de Applies funcionar)
+  # Gerar via:  kubectl create secret generic mr-dashboard-secret \
+  #               --from-literal=TFE_TOKEN='seu-token-aqui' \
+  #               -n mr-dashboard --dry-run=client -o yaml
+  # Ou inline: echo -n 'seu-token' | base64
+  TFE_TOKEN: <BASE64_DO_TOKEN_TFE>  # <CHANGE_ME>
+
+---
+# ── 4. Deployment ───────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mr-dashboard
+  namespace: mr-dashboard
+  labels:
+    app: mr-dashboard
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mr-dashboard
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0        # zero-downtime deploy
+  template:
+    metadata:
+      labels:
+        app: mr-dashboard
+        version: "1.0.0"
+      annotations:
+        # força rollout quando o ConfigMap muda
+        configmap-checksum: "v1"
+    spec:
+      serviceAccountName: mr-dashboard-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mr-dashboard
+          # <CHANGE_ME>: substitua pelo seu repositório ECR/registry
+          image: <AWS_ACCOUNT_ID>.dkr.ecr.sa-east-1.amazonaws.com/mr-dashboard:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: mr-dashboard-config
+            - secretRef:
+                name: mr-dashboard-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      # <CHANGE_ME>: ajuste pras subnets privadas do seu cluster
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: mr-dashboard
+
+---
+# ── 5. ServiceAccount ───────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mr-dashboard-sa
+  namespace: mr-dashboard
+  annotations:
+    # <CHANGE_ME>: IAM Role com permissão pra chamar o API Gateway se necessário
+    # eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/mr-dashboard-role
+
+---
+# ── 6. Service ──────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mr-dashboard-svc
+  namespace: mr-dashboard
+  labels:
+    app: mr-dashboard
+spec:
+  type: ClusterIP
+  selector:
+    app: mr-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+# ── 7. HorizontalPodAutoscaler ──────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mr-dashboard-hpa
+  namespace: mr-dashboard
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mr-dashboard
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ── 8. Ingress (AWS Load Balancer Controller) ────────────────────────────────
+# <CHANGE_ME>: ajuste as annotations pra sua configuração de ALB/NLB
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mr-dashboard-ingress
+  namespace: mr-dashboard
+  annotations:
+    # AWS Load Balancer Controller
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internal          # internal = só VPC/VPN
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # <CHANGE_ME>: ARN do certificado ACM
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:sa-east-1:<AWS_ACCOUNT_ID>:certificate/<CERT_ID>
+    # <CHANGE_ME>: Security group do ALB (deve aceitar tráfego da VPN)
+    alb.ingress.kubernetes.io/security-groups: <SG_ID>
+    # Health check
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    # Tags
+    alb.ingress.kubernetes.io/tags: "Project=mr-dashboard,Team=platform-engineering"
+spec:
+  rules:
+    - host: mr-dashboard.latam-infra-shared-services.aws.fisv.cloud  # <CHANGE_ME>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mr-dashboard-svc
+                port:
+                  number: 80
+
+---
+# ── 9. PodDisruptionBudget ──────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mr-dashboard-pdb
+  namespace: mr-dashboard
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mr-dashboard
+
+---
+# ── 10. NetworkPolicy — só aceita tráfego do ALB e do namespace ────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mr-dashboard-netpol
+  namespace: mr-dashboard
+spec:
+  podSelector:
+    matchLabels:
+      app: mr-dashboard
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # API Gateway HTTPS
+    - ports:
+        - port: 443
+          protocol: TCP
